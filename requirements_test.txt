@@ -1,0 +1,10 @@
+# Windows test-only compatibility environment.
+# HA 2025.1.0 pins ciso8601==2.3.2, which has no CPython 3.13 Windows wheel
+# and requires uninstalled Microsoft C++ Build Tools. Keep the component's
+# production manifest unchanged; exercise its supported HA APIs on the latest
+# available CPython 3.11-compatible Home Assistant release instead.
+homeassistant==2024.3.3
+jukeaudio==0.0.11
+async-timeout
+pytest==8.3.4
+pytest-asyncio==0.25.2
