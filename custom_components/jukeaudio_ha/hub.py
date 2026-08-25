@@ -2,7 +2,7 @@
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 
-from jukeaudio.jukeaudio_v3 import JukeAudioClientV3
+from .juke_client import JukeAudioClientV3
 
 from .const import DOMAIN, LOGGER
 
@@ -24,6 +24,7 @@ class JukeAudioHub:
         self.jukes = {}
         self.group_inputs = {}
         self.client = None
+        self.coordinator = None
         self._server_device_id = None
 
     async def verify_connection(self) -> bool:
@@ -71,6 +72,98 @@ class JukeAudioHub:
         return await self.client.get_zone_config(
             self._ip_address, self._username, self._password, zone_id
         )
+
+    def _get_coordinator(self):
+        """Return the coordinator associated with this hub, when available."""
+        if self.coordinator is not None:
+            return self.coordinator
+        if self._hass is None:
+            return None
+        for entry_data in getattr(self._hass, "data", {}).get(DOMAIN, {}).values():
+            if entry_data.get("hub") is self:
+                return entry_data.get("coordinator")
+        return None
+
+    async def _refresh_after_write(self) -> None:
+        """Refresh coordinator-backed state after a successful write."""
+        coordinator = self._get_coordinator()
+        if coordinator is not None:
+            await coordinator.async_request_refresh()
+
+    async def set_zone_mute(self, zone_id: str, muted: bool):
+        """Mute or unmute a zone without changing its volume."""
+        result = await self.client.set_zone_mute(
+            self._ip_address, self._username, self._password, zone_id, muted
+        )
+        await self._refresh_after_write()
+        return result
+
+    async def set_zone_enabled(self, zone_id: str, enabled: bool):
+        """Enable or disable a zone."""
+        result = await self.client.set_zone_enabled(
+            self._ip_address, self._username, self._password, zone_id, enabled
+        )
+        await self._refresh_after_write()
+        return result
+
+    async def set_zone_inputs(self, zone_id: str, input_ids: list[str]):
+        """Replace the inputs assigned to a zone."""
+        result = await self.client.set_zone_inputs(
+            self._ip_address, self._username, self._password, zone_id, input_ids
+        )
+        await self._refresh_after_write()
+        return result
+
+    async def add_input_zone(self, input_id: str, zone_id: str):
+        """Add a zone to an input without replacing other memberships."""
+        result = await self.client.add_input_zone(
+            self._ip_address, self._username, self._password, input_id, zone_id
+        )
+        await self._refresh_after_write()
+        return result
+
+    async def remove_input_zone(self, input_id: str, zone_id: str):
+        """Remove a zone from an input without changing other memberships."""
+        result = await self.client.remove_input_zone(
+            self._ip_address, self._username, self._password, input_id, zone_id
+        )
+        await self._refresh_after_write()
+        return result
+
+    async def get_active_input(self, zone_id: str):
+        """Read the active input for a zone."""
+        return await self.client.get_active_input(
+            self._ip_address, self._username, self._password, zone_id
+        )
+
+    async def set_active_input(self, zone_id: str, input_id: str):
+        """Select the active input for a zone."""
+        result = await self.client.set_active_input(
+            self._ip_address, self._username, self._password, zone_id, input_id
+        )
+        await self._refresh_after_write()
+        return result
+
+    async def get_streaming_inputs(self, zone_id: str):
+        """Read streaming inputs associated with a zone."""
+        return await self.client.get_streaming_inputs(
+            self._ip_address, self._username, self._password, zone_id
+        )
+
+    async def set_zone_based_input_enabled(
+        self, zone_id: str, input_type: str, enabled: bool
+    ):
+        """Enable or disable a supported native zone-based input type."""
+        result = await self.client.set_zone_based_input_enabled(
+            self._ip_address,
+            self._username,
+            self._password,
+            zone_id,
+            input_type,
+            enabled,
+        )
+        await self._refresh_after_write()
+        return result
 
     async def set_zone_input(self, zone_id: str, input):
         """Set zone inputs"""
