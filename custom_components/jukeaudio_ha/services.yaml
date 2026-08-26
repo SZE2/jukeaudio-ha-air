@@ -1,0 +1,54 @@
+set_input_zones:
+  name: Set input zones
+  description: >-
+    Replace the complete zone mapping for one general input only. The supplied
+    zone_ids list is the desired final set: omitted existing zones are removed,
+    listed zones are added, and an empty list removes all mappings for that
+    input. This service never changes mappings for any other input.
+  fields:
+    input_id:
+      name: Input
+      description: Immutable Juke input ID (a friendly input name is also resolved to its ID).
+      required: true
+      selector:
+        text:
+    zone_ids:
+      name: Zones
+      description: Immutable Juke zone IDs (friendly zone names are resolved before writing).
+      required: true
+      selector:
+        object:
+
+add_input_zone:
+  name: Add input zone
+  description: Add one zone to one general input without replacing its other mappings.
+  fields:
+    input_id:
+      name: Input
+      description: Immutable Juke input ID (a friendly input name is also resolved to its ID).
+      required: true
+      selector:
+        text:
+    zone_id:
+      name: Zone
+      description: Immutable Juke zone ID (a friendly zone name is resolved before writing).
+      required: true
+      selector:
+        text:
+
+remove_input_zone:
+  name: Remove input zone
+  description: Remove one zone from one general input without changing other mappings.
+  fields:
+    input_id:
+      name: Input
+      description: Immutable Juke input ID (a friendly input name is also resolved to its ID).
+      required: true
+      selector:
+        text:
+    zone_id:
+      name: Zone
+      description: Immutable Juke zone ID (a friendly zone name is resolved before writing).
+      required: true
+      selector:
+        text:

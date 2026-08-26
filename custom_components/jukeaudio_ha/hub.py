@@ -1,4 +1,6 @@
 """Hub for Juke Audio"""
+from collections.abc import Mapping
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 
@@ -129,6 +131,68 @@ class JukeAudioHub:
         )
         await self._refresh_after_write()
         return result
+
+    async def set_input_zones(self, input_id: str, zone_ids: list[str]):
+        """Replace only one general input's complete zone route set.
+
+        The v3 client exposes scoped add/remove membership operations rather than
+        a whole-input replacement endpoint. Compose those operations here so
+        mappings for every other input remain untouched, and refresh once after
+        the complete successful write sequence.
+        """
+        input_info = self.group_inputs.get(input_id)
+        if input_info is None:
+            raise ValueError(f"Unknown input: {input_id}")
+        if input_info.get("input_class") != 0:
+            raise ValueError(f"Input is not a general input: {input_id}")
+        if len(zone_ids) != len(set(zone_ids)):
+            raise ValueError("Duplicate zone IDs")
+
+        current_zones = input_info.get("zones", ()) or ()
+        if isinstance(current_zones, Mapping):
+            current_zones = current_zones.get(
+                "zone_ids", current_zones.get("zones", ())
+            ) or ()
+        current_ids = []
+        for zone in current_zones:
+            zone_id = (
+                zone
+                if isinstance(zone, str)
+                else zone.get("zone_id", zone.get("id"))
+            )
+            if isinstance(zone_id, str) and zone_id not in current_ids:
+                current_ids.append(zone_id)
+        current_set = set(current_ids)
+        desired_ids = list(dict.fromkeys(zone_ids))
+        desired_set = set(desired_ids)
+        results = []
+
+        for zone_id in current_ids:
+            if zone_id not in desired_set:
+                results.append(
+                    await self.client.remove_input_zone(
+                        self._ip_address,
+                        self._username,
+                        self._password,
+                        input_id,
+                        zone_id,
+                    )
+                )
+        for zone_id in desired_ids:
+            if zone_id not in current_set:
+                results.append(
+                    await self.client.add_input_zone(
+                        self._ip_address,
+                        self._username,
+                        self._password,
+                        input_id,
+                        zone_id,
+                    )
+                )
+
+        if results:
+            await self._refresh_after_write()
+        return results[-1] if results else None
 
     async def get_active_input(self, zone_id: str):
         """Read the active input for a zone."""

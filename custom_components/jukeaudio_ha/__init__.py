@@ -1,9 +1,10 @@
 """The Juke Audio integration."""
 from __future__ import annotations
 
-import async_timeout
-
+from collections.abc import Mapping
 from datetime import timedelta
+
+import async_timeout
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform, CONF_HOST, CONF_USERNAME, CONF_PASSWORD, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
@@ -11,8 +12,9 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, LOGGER
-from jukeaudio.exceptions import AuthenticationException, UnexpectedException
 from .hub import JukeAudioHub
+from .services import async_setup_services, async_unload_services
+from jukeaudio.exceptions import AuthenticationException, UnexpectedException
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.MEDIA_PLAYER, Platform.SWITCH]
 
@@ -38,6 +40,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await async_setup_services(hass)
 
     return True
 
@@ -46,6 +49,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
+        if not any(
+            isinstance(entry_data, Mapping) and "hub" in entry_data
+            for entry_data in hass.data[DOMAIN].values()
+        ):
+            await async_unload_services(hass)
 
     return unload_ok
 
