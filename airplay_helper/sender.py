@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from importlib import import_module
 from types import SimpleNamespace
@@ -91,13 +92,14 @@ class RaopSender:
             if key in _RAOP_TXT_PROPERTIES
         }
         service = pyatv.conf.ManualService(
+            f"raop:{target.device_id}:{target.player_uuid}:{target.port}",
             pyatv.const.Protocol.RAOP,
             target.port,
-            properties=properties,
+            properties,
         )
         config = pyatv.conf.AppleTV(target.host, target.service_name)
         config.add_service(service)
-        receiver = await pyatv.connect(config)
+        receiver = await pyatv.connect(config, asyncio.get_running_loop())
 
         try:
             await _maybe_await(receiver.audio.stream_file(wav_source))

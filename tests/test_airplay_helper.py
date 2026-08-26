@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 from types import SimpleNamespace
 
@@ -50,16 +52,19 @@ class FakeManualService:
 
     def __init__(
         self,
+        identifier: str,
         protocol: object,
         port: int,
-        *,
-        properties: dict[str, str] | None = None,
+        properties: dict[str, str],
         credentials: str | None = None,
+        password: str | None = None,
     ) -> None:
+        self.identifier = identifier
         self.protocol = protocol
         self.port = port
         self.properties = properties
         self.credentials = credentials
+        self.password = password
         self.__class__.calls.append(self)
 
 
@@ -107,6 +112,7 @@ class FakePyatv:
     def __init__(self, receiver: FakeReceiver) -> None:
         self.receiver = receiver
         self.configs: list[FakeAppleTV] = []
+        self.connect_loops: list[asyncio.AbstractEventLoop] = []
         self.interface = SimpleNamespace()
         self.conf = SimpleNamespace(
             AppleTV=self._apple_tv,
@@ -119,7 +125,13 @@ class FakePyatv:
         self.configs.append(config)
         return config
 
-    async def connect(self, config: FakeAppleTV) -> FakeReceiver:
+    async def connect(
+        self,
+        config: FakeAppleTV,
+        loop: asyncio.AbstractEventLoop,
+    ) -> FakeReceiver:
+        assert loop is asyncio.get_running_loop()
+        self.connect_loops.append(loop)
         return self.receiver
 
 
@@ -197,6 +209,9 @@ async def test_sender_uses_only_exact_zone_mapping_and_raop_txt(monkeypatch: pyt
     config = fake.configs[0]
     service = config.services[0]
     assert config.address == "198.51.100.24"
+    assert service.identifier == (
+        "raop:AA:BB:CC:DD:EE:06:player-zone-6:7015"
+    )
     assert service.port == 7015
     assert service.protocol is fake.Protocol.RAOP
     assert service.properties == {
@@ -205,7 +220,45 @@ async def test_sender_uses_only_exact_zone_mapping_and_raop_txt(monkeypatch: pyt
         "cn": "0,1",
         "sr": "44100",
     }
+    assert fake.connect_loops == [asyncio.get_running_loop()]
     assert receiver.stream_sources == ["exact.wav"]
+
+
+@pytest.mark.asyncio
+async def test_sender_smoke_uses_real_pyatv_api_without_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pyatv = pytest.importorskip("pyatv")
+    import pyatv.conf as pyatv_conf
+
+    manual_service_parameters = list(
+        inspect.signature(pyatv_conf.ManualService).parameters
+    )
+    connect_parameters = list(inspect.signature(pyatv.connect).parameters)
+    assert manual_service_parameters[:4] == [
+        "identifier",
+        "protocol",
+        "port",
+        "properties",
+    ]
+    assert connect_parameters[:2] == ["config", "loop"]
+
+    receiver = FakeReceiver()
+
+    async def fake_connect(
+        config: object,
+        loop: asyncio.AbstractEventLoop,
+    ) -> FakeReceiver:
+        assert loop is asyncio.get_running_loop()
+        return receiver
+
+    monkeypatch.setattr(pyatv, "connect", fake_connect)
+    target = resolve_raop_target(load_airplay_targets({"zone-6": _record()}), "zone-6")
+
+    await RaopSender().stream_wav(target, "smoke.wav")
+
+    assert receiver.stream_sources == ["smoke.wav"]
+    assert receiver.closed is True
 
 
 @pytest.mark.asyncio
