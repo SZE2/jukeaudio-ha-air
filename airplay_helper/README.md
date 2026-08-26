@@ -2,8 +2,9 @@
 
 This directory is a separately managed, source-only fallback sender. It is not
 part of the HACS custom component and does not import Home Assistant, Music
-Assistant, Juke API code, or any discovery/client code. The helper has no HTTP
-service, daemon, config flow, persistent credential store, or entity changes.
+Assistant, Juke API code, or any discovery/client code. The helper has no
+persistent credential store, config flow, or entity changes. Its optional HTTP
+control plane is defined in `server.py` and remains RAOP-only.
 
 ## Direct mapping only
 
@@ -42,6 +43,7 @@ The helper-only dependency is pinned in `requirements.txt`:
 
 ```text
 pyatv==0.18.0
+aiohttp>=3.9,<4
 ```
 
 Install that dependency in the environment managed for this helper, then run a
@@ -73,3 +75,33 @@ models, other errors, and generic `ConnectionError` remain failures. This is a
 narrow Juke/receiver-specific RAOP teardown compatibility behavior and does not
 prove audible output. Native AirPlay 2 (AP2) remains unsupported. No live device
 test is part of this source package's automated verification.
+
+## Local HTTP control plane
+
+The control plane accepts only a strict exact `zone_id` and an absolute
+`http://` or `https://` media URL whose hostname is in the explicitly supplied
+allowlist. It passes that approved URL string to the injected/production RAOP
+sender; it does not fetch media or expose media content. `airplay2` targets are
+rejected. `/health` is the only unauthenticated route and returns only
+`{"status":"ok"}`. Stream and job routes require an exact
+`Authorization: Bearer <token>` header and expose only opaque job IDs and job
+status.
+
+The CLI reads the token only from the named environment variable
+`AIRPLAY_HELPER_BEARER_TOKEN`; it never accepts a token command-line argument.
+The default bind is loopback (`127.0.0.1`) and access logging is disabled so
+URLs, target identities, and token values are not written by the helper:
+
+```text
+set AIRPLAY_HELPER_BEARER_TOKEN=<TOKEN_FROM_SECRET_STORE>
+python -m airplay_helper.server ^
+  --targets-file <TARGETS_FILE> ^
+  --allowed-media-host <APPROVED_MEDIA_HOST> ^
+  --port 8765
+```
+
+Repeat `--allowed-media-host` for additional exact hostnames. The HTTP service
+is deliberately separate from Home Assistant and Music Assistant; native
+AirPlay 2 is not implemented. The source tests use aiohttp's local test
+utilities and fake senders only; they do not launch this CLI or contact a
+device/network.
