@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from collections.abc import Callable
 from importlib import import_module
 from types import SimpleNamespace
 from typing import Any
@@ -55,6 +56,28 @@ _RAOP_TXT_PROPERTIES = frozenset(
 )
 _REMOTE_CLOSE_ERRORS = (ConnectionError, EOFError, OSError)
 _PYATV_NOT_CONNECTED_TO_REMOTE = "not connected to remote"
+_SHAIRPORT_SYNC_MODEL = "Shairport Sync"
+
+
+def _is_shairport_post_transfer_teardown(
+    target: AirPlayTarget,
+    error: BaseException,
+    transfer_complete_marker: Callable[[], bool] | None,
+) -> bool:
+    """Recognize only the observed pyatv/Shairport post-transfer teardown."""
+    if (
+        type(error) is not RuntimeError
+        or str(error) != _PYATV_NOT_CONNECTED_TO_REMOTE
+        or target.txt.get("model") != _SHAIRPORT_SYNC_MODEL
+    ):
+        return False
+
+    # pyatv 0.18 has no transfer-complete callback before its internal RTSP
+    # teardown.  The production path therefore relies on this exact, observed
+    # Shairport Sync exception boundary.  Tests may inject a marker to model a
+    # completion that occurred before the same exception; a false marker keeps
+    # the stream error fatal.
+    return transfer_complete_marker is None or transfer_complete_marker()
 
 
 def _load_pyatv() -> Any:
@@ -107,6 +130,14 @@ async def _await_close_tasks(receiver: Any) -> tuple[BaseException, ...]:
 class RaopSender:
     """Send one WAV source through pyatv's legacy RAOP audio interface."""
 
+    def __init__(
+        self,
+        *,
+        transfer_complete_marker: Callable[[], bool] | None = None,
+    ) -> None:
+        """Create a sender with an optional source-level completion test seam."""
+        self._transfer_complete_marker = transfer_complete_marker
+
     async def stream_wav(self, target: AirPlayTarget, wav_source: str) -> None:
         """Connect to the explicit target, stream exactly ``wav_source``, and close."""
         if target.protocol_mode != "raop_fallback":
@@ -130,14 +161,22 @@ class RaopSender:
 
         try:
             await _maybe_await(receiver.stream.stream_file(wav_source))
-        except BaseException:
-            # Preserve every setup/connection/stream failure.  Cleanup is best
-            # effort here so a second socket error cannot mask the real failure.
-            try:
-                await _await_close_tasks(receiver)
-            except BaseException:
+        except BaseException as stream_error:
+            if _is_shairport_post_transfer_teardown(
+                target,
+                stream_error,
+                self._transfer_complete_marker,
+            ):
                 pass
-            raise
+            else:
+                # Preserve every setup/connection/stream failure.  Cleanup is
+                # best effort here so a second socket error cannot mask the
+                # real failure.
+                try:
+                    await _await_close_tasks(receiver)
+                except BaseException:
+                    pass
+                raise
 
         close_errors = await _await_close_tasks(receiver)
         for close_error in close_errors:

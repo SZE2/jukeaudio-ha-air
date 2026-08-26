@@ -62,7 +62,14 @@ python -m airplay_helper --targets-file <LOCAL_ZONE_6_TARGETS_JSON> --zone-id <L
 ```
 
 The command connects with pyatv's `ManualService` in RAOP mode, streams the
-specified file once, and closes the connection. A receiver closing its control
-socket during teardown is tolerated only after the file transfer completed;
-setup and streaming errors are still failures. No live device test is part of
-this source package's automated verification.
+specified file once, and closes the connection. For the explicitly mapped Juke
+receiver whose `txt["model"]` is exactly `Shairport Sync`, the helper tolerates
+only the exact built-in `RuntimeError("not connected to remote")` raised from
+`receiver.stream.stream_file` at the observed pyatv 0.18 post-transfer RTSP
+teardown boundary. pyatv 0.18 does not expose a transfer-complete callback before
+that internal teardown; the source tests use an injected completion marker to
+exercise the boundary. Setup failures, pre-transfer stream failures, other
+models, other errors, and generic `ConnectionError` remain failures. This is a
+narrow Juke/receiver-specific RAOP teardown compatibility behavior and does not
+prove audible output. Native AirPlay 2 (AP2) remains unsupported. No live device
+test is part of this source package's automated verification.

@@ -88,12 +88,17 @@ class FakeStream:
     async def stream_file(self, source: object) -> None:
         self.receiver.stream_sources.append(source)
         if self.receiver.stream_error is not None:
+            if self.receiver.mark_stream_complete_before_error:
+                self.receiver.stream_transfer_completed = True
             raise self.receiver.stream_error
+        self.receiver.stream_transfer_completed = True
 
 
 class FakeReceiver:
     def __init__(self, stream_error: BaseException | None = None) -> None:
         self.stream_error = stream_error
+        self.mark_stream_complete_before_error = False
+        self.stream_transfer_completed = False
         self.stream_sources: list[object] = []
         self.stream = FakeStream(self)
         self.closed = False
@@ -372,6 +377,150 @@ async def test_sender_propagates_non_remote_close_task_error(
     with pytest.raises(RuntimeError, match="teardown failed"):
         await RaopSender().stream_wav(target, "teardown-error.wav")
 
+    assert receiver.close_completed is True
+
+
+@pytest.mark.asyncio
+async def test_sender_tolerates_shairport_stream_teardown_after_completed_transfer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receiver = FakeReceiver(stream_error=RuntimeError("not connected to remote"))
+    _install_fake_pyatv(monkeypatch, receiver)
+    target = resolve_raop_target(
+        load_airplay_targets(
+            {
+                "zone-6": _record(
+                    txt={"deviceid": "AA:BB:CC:DD:EE:06", "model": "Shairport Sync"}
+                )
+            }
+        ),
+        "zone-6",
+    )
+
+    await RaopSender().stream_wav(target, "completed-shairport.wav")
+
+    assert receiver.stream_sources == ["completed-shairport.wav"]
+    assert receiver.closed is True
+    assert receiver.close_completed is True
+
+
+@pytest.mark.asyncio
+async def test_sender_requires_completion_marker_for_injected_pretransfer_teardown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receiver = FakeReceiver(stream_error=RuntimeError("not connected to remote"))
+    receiver.mark_stream_complete_before_error = False
+    _install_fake_pyatv(monkeypatch, receiver)
+    target = resolve_raop_target(
+        load_airplay_targets(
+            {
+                "zone-6": _record(
+                    txt={"deviceid": "AA:BB:CC:DD:EE:06", "model": "Shairport Sync"}
+                )
+            }
+        ),
+        "zone-6",
+    )
+
+    with pytest.raises(RuntimeError, match="not connected to remote"):
+        await RaopSender(
+            transfer_complete_marker=lambda: receiver.stream_transfer_completed
+        ).stream_wav(target, "not-completed-shairport.wav")
+
+    assert receiver.closed is True
+    assert receiver.close_completed is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model",
+    [None, "Other Receiver"],
+)
+async def test_sender_propagates_stream_teardown_for_non_shairport_targets(
+    monkeypatch: pytest.MonkeyPatch,
+    model: str | None,
+) -> None:
+    receiver = FakeReceiver(stream_error=RuntimeError("not connected to remote"))
+    _install_fake_pyatv(monkeypatch, receiver)
+    txt = {"deviceid": "AA:BB:CC:DD:EE:06"}
+    if model is not None:
+        txt["model"] = model
+    target = resolve_raop_target(
+        load_airplay_targets({"zone-6": _record(txt=txt)}), "zone-6"
+    )
+
+    with pytest.raises(RuntimeError, match="not connected to remote"):
+        await RaopSender().stream_wav(target, "wrong-receiver.wav")
+
+    assert receiver.closed is True
+    assert receiver.close_completed is True
+
+
+@pytest.mark.asyncio
+async def test_sender_propagates_other_stream_errors_for_shairport_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receiver = FakeReceiver(stream_error=RuntimeError("different stream failure"))
+    _install_fake_pyatv(monkeypatch, receiver)
+    target = resolve_raop_target(
+        load_airplay_targets(
+            {
+                "zone-6": _record(
+                    txt={"deviceid": "AA:BB:CC:DD:EE:06", "model": "Shairport Sync"}
+                )
+            }
+        ),
+        "zone-6",
+    )
+
+    with pytest.raises(RuntimeError, match="different stream failure"):
+        await RaopSender().stream_wav(target, "other-stream-error.wav")
+
+
+@pytest.mark.asyncio
+async def test_sender_does_not_tolerate_connection_error_from_stream_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receiver = FakeReceiver(stream_error=ConnectionError("receiver disconnected"))
+    _install_fake_pyatv(monkeypatch, receiver)
+    target = resolve_raop_target(
+        load_airplay_targets(
+            {
+                "zone-6": _record(
+                    txt={"deviceid": "AA:BB:CC:DD:EE:06", "model": "Shairport Sync"}
+                )
+            }
+        ),
+        "zone-6",
+    )
+
+    with pytest.raises(ConnectionError, match="receiver disconnected"):
+        await RaopSender().stream_wav(target, "connection-error.wav")
+
+
+@pytest.mark.asyncio
+async def test_sender_accepts_injected_completion_marker_before_shairport_teardown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receiver = FakeReceiver(stream_error=RuntimeError("not connected to remote"))
+    receiver.mark_stream_complete_before_error = True
+    _install_fake_pyatv(monkeypatch, receiver)
+    target = resolve_raop_target(
+        load_airplay_targets(
+            {
+                "zone-6": _record(
+                    txt={"deviceid": "AA:BB:CC:DD:EE:06", "model": "Shairport Sync"}
+                )
+            }
+        ),
+        "zone-6",
+    )
+
+    await RaopSender(
+        transfer_complete_marker=lambda: receiver.stream_transfer_completed
+    ).stream_wav(target, "marked-completed-shairport.wav")
+
+    assert receiver.stream_transfer_completed is True
     assert receiver.close_completed is True
 
 
