@@ -294,6 +294,27 @@ async def test_sender_smoke_uses_real_pyatv_api_without_network(
     assert receiver.close_completed is True
 
 
+def test_real_pyatv_raop_source_contract_keeps_url_retrieval_in_pyatv() -> None:
+    pytest.importorskip("pyatv")
+    audio_source = pytest.importorskip("pyatv.protocols.raop.audio_source")
+    from pyatv.interface import Stream
+
+    open_source = getattr(audio_source, "open_source", None)
+    assert callable(open_source)
+    open_source_source = inspect.getsource(open_source)
+    assert "if isinstance(source, str):" in open_source_source
+    assert "InternetSource.open" in open_source_source
+    assert "FileSource.open" in open_source_source
+
+    source_parameter = next(
+        parameter
+        for name, parameter in inspect.signature(Stream.stream_file).parameters.items()
+        if name != "self"
+    )
+    assert source_parameter.name == "file"
+    assert "str" in str(source_parameter.annotation)
+
+
 @pytest.mark.asyncio
 async def test_sender_propagates_stream_failure_and_still_closes(monkeypatch: pytest.MonkeyPatch) -> None:
     receiver = FakeReceiver(stream_error=RuntimeError("stream failed"))

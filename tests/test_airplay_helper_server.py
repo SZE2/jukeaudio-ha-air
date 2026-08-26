@@ -160,6 +160,35 @@ async def test_authorized_stream_schedules_exact_raop_target_and_approved_url() 
     assert sender.calls == [(target, media_url)]
 
 
+async def test_stream_rejects_alternate_loopback_spellings_even_when_allowlisted() -> None:
+    sender = FakeSender()
+    alternate_loopback_hosts = (
+        "2130706433",
+        "127.000.000.001",
+        "0x7f000001",
+    )
+    app = create_app(
+        targets={"zone-alpha": _target()},
+        bearer_token=_TEST_TOKEN,
+        allowed_media_hosts={_MEDIA_HOST, *alternate_loopback_hosts},
+        sender_factory=_sender_factory(sender),
+    )
+    headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+
+    async with TestServer(app) as server:
+        async with TestClient(server) as client:
+            for host in alternate_loopback_hosts:
+                response = await client.post(
+                    "/v1/streams",
+                    json={"zone_id": "zone-alpha", "media_url": f"http://{host}/audio.wav"},
+                    headers=headers,
+                )
+                assert response.status == 400
+                assert await response.json() == {"error": "invalid request"}
+
+    assert sender.calls == []
+
+
 async def test_stream_rejects_unsafe_or_unapproved_media_urls_before_sender() -> None:
     sender = FakeSender()
     app = create_app(

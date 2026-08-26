@@ -84,15 +84,41 @@ def _is_loopback_host(hostname: str) -> bool:
     normalized = hostname.rstrip(".").casefold()
     if normalized in {"localhost", "localhost.localdomain", "ip6-localhost"}:
         return True
+
+    # Reject alternate textual forms that HTTP clients may treat as IPv4
+    # addresses, without resolving arbitrary hostnames.
+    address_text = normalized.split("%", 1)[0]
     try:
-        address = ipaddress.ip_address(normalized)
-        return address.is_loopback or (
+        address = ipaddress.ip_address(address_text)
+    except ValueError:
+        address = None
+        if address_text.isdecimal():
+            try:
+                address = ipaddress.ip_address(int(address_text, 10))
+            except ValueError:
+                pass
+        elif address_text.startswith("0x"):
+            try:
+                address = ipaddress.ip_address(int(address_text, 16))
+            except ValueError:
+                pass
+        else:
+            parts = address_text.split(".")
+            if len(parts) == 4 and all(part.isdecimal() for part in parts):
+                try:
+                    address = ipaddress.ip_address(
+                        ".".join(str(int(part, 10)) for part in parts)
+                    )
+                except ValueError:
+                    pass
+    return address is not None and (
+        address.is_loopback
+        or (
             address.version == 6
             and address.ipv4_mapped is not None
             and address.ipv4_mapped.is_loopback
         )
-    except ValueError:
-        return False
+    )
 
 
 def _validate_media_url(media_url: object, allowed_media_hosts: frozenset[str]) -> str:

@@ -80,11 +80,16 @@ test is part of this source package's automated verification.
 
 The control plane accepts only a strict exact `zone_id` and an absolute
 `http://` or `https://` media URL whose hostname is in the explicitly supplied
-allowlist. It passes that approved URL string to the injected/production RAOP
-sender; it does not fetch media or expose media content. `airplay2` targets are
-rejected. `/health` is the only unauthenticated route and returns only
+allowlist. It rejects loopback hosts, including common alternate IPv4 spellings,
+before allowlist matching. It passes the approved URL string unchanged to the
+injected/production RAOP sender. When the sender calls pyatv's
+`receiver.stream.stream_file`, pyatv's RAOP source implementation owns retrieval
+of an approved HTTP(S) URL; the helper does not add a downloader or local media
+cache. Host allowlisting and loopback rejection remain helper control-plane
+guardrails. `airplay2` targets are rejected. `/health` is the only
+unauthenticated route and returns only
 `{"status":"ok"}`. Stream and job routes require an exact
-`Authorization: Bearer <token>` header and expose only opaque job IDs and job
+`Authorization: Bearer <TOKEN>` header and expose only opaque job IDs and job
 status.
 
 The CLI reads the token only from the named environment variable
