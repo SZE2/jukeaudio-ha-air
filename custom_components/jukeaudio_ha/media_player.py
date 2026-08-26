@@ -105,17 +105,17 @@ class Zone(JukeAudioMediaPlayerBase):
         """State of the player."""
         # Check if there's an active input for this zone
         zone_data = self._juke.zones[self._zone_id]
-        
+
+        # A disabled zone is off even if stale active-input data remains cached.
+        if not zone_data.get("enabled", True):
+            return MediaPlayerState.OFF
+
         # If zone has an active_input that's not None, it's playing
         if "active_input" in zone_data and zone_data["active_input"] is not None:
             return MediaPlayerState.PLAYING
-        
+
         # No active input but zone is on
-        if zone_data.get("enabled", True):
-            return MediaPlayerState.ON
-            
-        # Zone is disabled
-        return MediaPlayerState.OFF
+        return MediaPlayerState.ON
         
     @property
     def media_title(self) -> str | None:
@@ -171,12 +171,18 @@ class Zone(JukeAudioMediaPlayerBase):
         return (
             MediaPlayerEntityFeature.SELECT_SOURCE
             | MediaPlayerEntityFeature.VOLUME_SET
+            | MediaPlayerEntityFeature.VOLUME_MUTE
         )
 
     @property
     def volume_level(self) -> float | None:
         """Volume level of the media player (0..1)."""
         return float(self._juke.zones[self._zone_id]["volume"]) / 100.0
+
+    @property
+    def is_volume_muted(self) -> bool | None:
+        """Return the cached mute state of the zone."""
+        return self._juke.zones[self._zone_id].get("muted")
 
     @property
     def source_list(self) -> list[str]:
@@ -210,6 +216,12 @@ class Zone(JukeAudioMediaPlayerBase):
         """Set volume level, range 0..1."""
         LOGGER.debug("Setting volume to %s for zone %s", volume, self._zone_id)
         await self._juke.hub.set_zone_volume(self._zone_id, int(volume*100))
+        await self.async_update()
+
+    async def async_mute_volume(self, mute: bool) -> None:
+        """Mute or unmute the zone without changing its volume."""
+        LOGGER.debug("Setting mute to %s for zone %s", mute, self._zone_id)
+        await self._juke.hub.set_zone_mute(self._zone_id, mute)
         await self.async_update()
 
     async def async_select_source(self, source: str):
