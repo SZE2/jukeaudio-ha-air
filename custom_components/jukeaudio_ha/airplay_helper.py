@@ -80,37 +80,65 @@ def validate_helper_base_url(value: object) -> str:
     return _validate_helper_base_url(value)
 
 
+def _parse_legacy_ipv4(address_text: str) -> ipaddress.IPv4Address | None:
+    parts = address_text.split(".")
+    if not 1 <= len(parts) <= 4 or any(not part for part in parts):
+        return None
+
+    values: list[int] = []
+    for part in parts:
+        if part[:2].casefold() == "0x":
+            digits = part[2:]
+            if not digits or any(char not in "0123456789abcdef" for char in digits.casefold()):
+                return None
+            base = 16
+        elif len(part) > 1 and part.startswith("0"):
+            if any(char not in "01234567" for char in part):
+                return None
+            base = 8
+        elif all("0" <= char <= "9" for char in part):
+            base = 10
+        else:
+            return None
+        values.append(int(part, base))
+
+    limits = {
+        1: (0xFFFFFFFF,),
+        2: (0xFF, 0xFFFFFF),
+        3: (0xFF, 0xFF, 0xFFFF),
+        4: (0xFF, 0xFF, 0xFF, 0xFF),
+    }[len(values)]
+    if any(value > limit for value, limit in zip(values, limits)):
+        return None
+
+    if len(values) == 1:
+        numeric_address = values[0]
+    elif len(values) == 2:
+        numeric_address = (values[0] << 24) | values[1]
+    elif len(values) == 3:
+        numeric_address = (values[0] << 24) | (values[1] << 16) | values[2]
+    else:
+        numeric_address = (
+            (values[0] << 24)
+            | (values[1] << 16)
+            | (values[2] << 8)
+            | values[3]
+        )
+    return ipaddress.IPv4Address(numeric_address)
+
+
 def _is_loopback_host(hostname: str) -> bool:
     normalized = hostname.rstrip(".").casefold()
     if normalized in {"localhost", "localhost.localdomain", "ip6-localhost"}:
         return True
 
-    # Reject the common alternate textual forms that HTTP clients may treat as
-    # IPv4 addresses, without resolving arbitrary hostnames.
+    # Reject alternate textual forms that HTTP clients may treat as IPv4
+    # addresses, without resolving arbitrary hostnames.
     address_text = normalized.split("%", 1)[0]
     try:
         address = ipaddress.ip_address(address_text)
     except ValueError:
-        address = None
-        if address_text.isdecimal():
-            try:
-                address = ipaddress.ip_address(int(address_text, 10))
-            except ValueError:
-                pass
-        elif address_text.startswith("0x"):
-            try:
-                address = ipaddress.ip_address(int(address_text, 16))
-            except ValueError:
-                pass
-        else:
-            parts = address_text.split(".")
-            if len(parts) == 4 and all(part.isdecimal() for part in parts):
-                try:
-                    address = ipaddress.ip_address(
-                        ".".join(str(int(part, 10)) for part in parts)
-                    )
-                except ValueError:
-                    pass
+        address = _parse_legacy_ipv4(address_text)
     return address is not None and (
         address.is_loopback
         or (

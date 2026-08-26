@@ -186,6 +186,35 @@ async def test_invalid_media_urls_are_rejected_before_network(
 
 
 @pytest.mark.parametrize(
+    "media_url",
+    [
+        "http://127.1/audio.mp3",
+        "http://127.0.1/audio.mp3",
+        "http://0177.0.0.1/audio.mp3",
+        "http://0x7f.0.0.1/audio.mp3",
+    ],
+)
+@pytest.mark.asyncio
+async def test_legacy_numeric_loopback_media_urls_are_rejected_before_network(
+    monkeypatch: pytest.MonkeyPatch, media_url: str
+) -> None:
+    """Legacy numeric IPv4 loopback aliases never reach the helper request."""
+    session = _FakeSession()
+    monkeypatch.setattr(
+        "custom_components.jukeaudio_ha.airplay_helper.async_get_clientsession",
+        lambda hass: session,
+    )
+    entry = SimpleNamespace(options=_options())
+
+    with pytest.raises(AirPlayHelperError, match="invalid media URL"):
+        await AirPlayHelperClient(SimpleNamespace(), entry).async_play_media(
+            "zone-1", media_url
+        )
+
+    assert session.calls == []
+
+
+@pytest.mark.parametrize(
     ("status", "payload"),
     [
         (400, {"error": "body-must-not-escape"}),
