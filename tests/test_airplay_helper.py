@@ -81,7 +81,7 @@ class FakeAppleTV:
         self.services.append(service)
 
 
-class FakeAudio:
+class FakeStream:
     def __init__(self, receiver: "FakeReceiver") -> None:
         self.receiver = receiver
 
@@ -95,7 +95,7 @@ class FakeReceiver:
     def __init__(self, stream_error: BaseException | None = None) -> None:
         self.stream_error = stream_error
         self.stream_sources: list[object] = []
-        self.audio = FakeAudio(self)
+        self.stream = FakeStream(self)
         self.closed = False
         self.close_error: BaseException | None = None
 
@@ -230,6 +230,10 @@ async def test_sender_smoke_uses_real_pyatv_api_without_network(
 ) -> None:
     pyatv = pytest.importorskip("pyatv")
     import pyatv.conf as pyatv_conf
+    import pyatv.interface as pyatv_interface
+
+    assert callable(getattr(pyatv_interface.Stream, "stream_file", None))
+    assert not hasattr(pyatv_interface.Audio, "stream_file")
 
     manual_service_parameters = list(
         inspect.signature(pyatv_conf.ManualService).parameters

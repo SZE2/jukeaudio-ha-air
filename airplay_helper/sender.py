@@ -102,7 +102,7 @@ class RaopSender:
         receiver = await pyatv.connect(config, asyncio.get_running_loop())
 
         try:
-            await _maybe_await(receiver.audio.stream_file(wav_source))
+            await _maybe_await(receiver.stream.stream_file(wav_source))
         except BaseException:
             # Preserve every setup/connection/stream failure.  Cleanup is best
             # effort here so a second socket error cannot mask the real failure.
