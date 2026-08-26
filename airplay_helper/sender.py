@@ -77,6 +77,32 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
+def _normalize_close_tasks(close_result: Any) -> tuple[Any, ...]:
+    """Normalize pyatv's documented iterable of close tasks."""
+    try:
+        close_tasks = tuple(close_result)
+    except TypeError as err:
+        raise TypeError(
+            "receiver.close() must return an iterable of awaitable tasks"
+        ) from err
+
+    if not all(inspect.isawaitable(task) for task in close_tasks):
+        raise TypeError(
+            "receiver.close() must return an iterable of awaitable tasks"
+        )
+    return close_tasks
+
+
+async def _await_close_tasks(receiver: Any) -> tuple[BaseException, ...]:
+    """Await every task returned by ``AppleTV.close`` and collect task errors."""
+    close_tasks = _normalize_close_tasks(receiver.close())
+    if not close_tasks:
+        return ()
+
+    results = await asyncio.gather(*close_tasks, return_exceptions=True)
+    return tuple(result for result in results if isinstance(result, BaseException))
+
+
 class RaopSender:
     """Send one WAV source through pyatv's legacy RAOP audio interface."""
 
@@ -107,18 +133,15 @@ class RaopSender:
             # Preserve every setup/connection/stream failure.  Cleanup is best
             # effort here so a second socket error cannot mask the real failure.
             try:
-                await _maybe_await(receiver.close())
+                await _await_close_tasks(receiver)
             except BaseException:
                 pass
             raise
 
-        try:
-            await _maybe_await(receiver.close())
-        except _REMOTE_CLOSE_ERRORS:
-            # Some RAOP receivers close their control socket immediately after
-            # accepting the completed transfer.  Only this post-stream close is
-            # tolerated; setup and stream failures remain failures above.
-            pass
+        close_errors = await _await_close_tasks(receiver)
+        for close_error in close_errors:
+            if not isinstance(close_error, _REMOTE_CLOSE_ERRORS):
+                raise close_error
 
 
 __all__ = ["RaopSender"]

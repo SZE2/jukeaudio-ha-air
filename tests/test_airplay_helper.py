@@ -97,12 +97,30 @@ class FakeReceiver:
         self.stream_sources: list[object] = []
         self.stream = FakeStream(self)
         self.closed = False
+        self.close_completed_tasks: set[int] = set()
+        self.close_task_count = 1
+        self.close_call_error: BaseException | None = None
         self.close_error: BaseException | None = None
 
-    async def close(self) -> None:
-        self.closed = True
-        if self.close_error is not None:
-            raise self.close_error
+    def close(self) -> list[asyncio.Task[None]]:
+        if self.close_call_error is not None:
+            raise self.close_call_error
+
+        async def finish_close(index: int) -> None:
+            await asyncio.sleep(0)
+            self.closed = True
+            self.close_completed_tasks.add(index)
+            if self.close_error is not None and index == 0:
+                raise self.close_error
+
+        return [
+            asyncio.create_task(finish_close(index))
+            for index in range(self.close_task_count)
+        ]
+
+    @property
+    def close_completed(self) -> bool:
+        return len(self.close_completed_tasks) == self.close_task_count
 
 
 class FakePyatv:
@@ -189,6 +207,7 @@ def test_resolve_raop_target_rejects_airplay2_mode() -> None:
 @pytest.mark.asyncio
 async def test_sender_uses_only_exact_zone_mapping_and_raop_txt(monkeypatch: pytest.MonkeyPatch) -> None:
     receiver = FakeReceiver()
+    receiver.close_task_count = 2
     fake = _install_fake_pyatv(monkeypatch, receiver)
     targets = load_airplay_targets(
         {
@@ -222,6 +241,7 @@ async def test_sender_uses_only_exact_zone_mapping_and_raop_txt(monkeypatch: pyt
     }
     assert fake.connect_loops == [asyncio.get_running_loop()]
     assert receiver.stream_sources == ["exact.wav"]
+    assert receiver.close_completed is True
 
 
 @pytest.mark.asyncio
@@ -246,6 +266,9 @@ async def test_sender_smoke_uses_real_pyatv_api_without_network(
         "properties",
     ]
     assert connect_parameters[:2] == ["config", "loop"]
+    close_signature = inspect.signature(pyatv_conf.AppleTV.close)
+    assert not inspect.iscoroutinefunction(pyatv_conf.AppleTV.close)
+    assert "Task" in str(close_signature.return_annotation)
 
     receiver = FakeReceiver()
 
@@ -263,6 +286,7 @@ async def test_sender_smoke_uses_real_pyatv_api_without_network(
 
     assert receiver.stream_sources == ["smoke.wav"]
     assert receiver.closed is True
+    assert receiver.close_completed is True
 
 
 @pytest.mark.asyncio
@@ -275,6 +299,7 @@ async def test_sender_propagates_stream_failure_and_still_closes(monkeypatch: py
         await RaopSender().stream_wav(target, "failed.wav")
 
     assert receiver.closed is True
+    assert receiver.close_completed is True
 
 
 @pytest.mark.asyncio
@@ -290,6 +315,35 @@ async def test_sender_tolerates_remote_close_only_during_completed_teardown(
 
     assert receiver.stream_sources == ["completed.wav"]
     assert receiver.closed is True
+    assert receiver.close_completed is True
+
+
+@pytest.mark.asyncio
+async def test_sender_does_not_tolerate_remote_error_from_close_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receiver = FakeReceiver()
+    receiver.close_call_error = ConnectionResetError("close call failed")
+    _install_fake_pyatv(monkeypatch, receiver)
+    target = resolve_raop_target(load_airplay_targets({"zone-6": _record()}), "zone-6")
+
+    with pytest.raises(ConnectionResetError, match="close call failed"):
+        await RaopSender().stream_wav(target, "close-call-error.wav")
+
+
+@pytest.mark.asyncio
+async def test_sender_propagates_non_remote_close_task_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receiver = FakeReceiver()
+    receiver.close_error = RuntimeError("teardown failed")
+    _install_fake_pyatv(monkeypatch, receiver)
+    target = resolve_raop_target(load_airplay_targets({"zone-6": _record()}), "zone-6")
+
+    with pytest.raises(RuntimeError, match="teardown failed"):
+        await RaopSender().stream_wav(target, "teardown-error.wav")
+
+    assert receiver.close_completed is True
 
 
 @pytest.mark.asyncio
@@ -297,7 +351,7 @@ async def test_sender_does_not_hide_stream_error_when_teardown_also_closes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     receiver = FakeReceiver(stream_error=RuntimeError("setup or stream failed"))
-    receiver.close_error = ConnectionResetError("receiver closed early")
+    receiver.close_error = RuntimeError("teardown failed after stream error")
     _install_fake_pyatv(monkeypatch, receiver)
     target = resolve_raop_target(load_airplay_targets({"zone-6": _record()}), "zone-6")
 
@@ -305,3 +359,4 @@ async def test_sender_does_not_hide_stream_error_when_teardown_also_closes(
         await RaopSender().stream_wav(target, "not-completed.wav")
 
     assert receiver.closed is True
+    assert receiver.close_completed is True
