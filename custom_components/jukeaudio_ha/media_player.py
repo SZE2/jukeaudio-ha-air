@@ -12,6 +12,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .airplay_helper import AirPlayHelperClient, has_raop_target
 from .const import DOMAIN, LOGGER
 from .hub import JukeAudioHub, JukeAudioDevice
 
@@ -168,10 +169,19 @@ class Zone(JukeAudioMediaPlayerBase):
     @property
     def supported_features(self) -> MediaPlayerEntityFeature:
         """Flag media player features that are supported."""
-        return (
+        features = (
             MediaPlayerEntityFeature.SELECT_SOURCE
             | MediaPlayerEntityFeature.VOLUME_SET
             | MediaPlayerEntityFeature.VOLUME_MUTE
+        )
+        if has_raop_target(self._config_entry, self._zone_id):
+            features |= MediaPlayerEntityFeature.PLAY_MEDIA
+        return features
+
+    async def async_play_media(self, media_type: str, media_id: str, **kwargs: object) -> None:
+        """Submit a direct HTTP(S) media URL to the configured RAOP helper."""
+        await AirPlayHelperClient(self.hass, self._config_entry).async_play_media(
+            self._zone_id, media_id
         )
 
     @property
