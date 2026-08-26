@@ -303,6 +303,22 @@ async def test_sender_propagates_stream_failure_and_still_closes(monkeypatch: py
 
 
 @pytest.mark.asyncio
+async def test_sender_tolerates_pyatv_not_connected_teardown_after_completed_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receiver = FakeReceiver()
+    receiver.close_error = RuntimeError("not connected to remote")
+    _install_fake_pyatv(monkeypatch, receiver)
+    target = resolve_raop_target(load_airplay_targets({"zone-6": _record()}), "zone-6")
+
+    await RaopSender().stream_wav(target, "completed-pyatv.wav")
+
+    assert receiver.stream_sources == ["completed-pyatv.wav"]
+    assert receiver.closed is True
+    assert receiver.close_completed is True
+
+
+@pytest.mark.asyncio
 async def test_sender_tolerates_remote_close_only_during_completed_teardown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -329,6 +345,19 @@ async def test_sender_does_not_tolerate_remote_error_from_close_call(
 
     with pytest.raises(ConnectionResetError, match="close call failed"):
         await RaopSender().stream_wav(target, "close-call-error.wav")
+
+
+@pytest.mark.asyncio
+async def test_sender_does_not_tolerate_pyatv_runtime_error_from_close_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receiver = FakeReceiver()
+    receiver.close_call_error = RuntimeError("not connected to remote")
+    _install_fake_pyatv(monkeypatch, receiver)
+    target = resolve_raop_target(load_airplay_targets({"zone-6": _record()}), "zone-6")
+
+    with pytest.raises(RuntimeError, match="not connected to remote"):
+        await RaopSender().stream_wav(target, "close-call-runtime-error.wav")
 
 
 @pytest.mark.asyncio

@@ -54,6 +54,7 @@ _RAOP_TXT_PROPERTIES = frozenset(
     }
 )
 _REMOTE_CLOSE_ERRORS = (ConnectionError, EOFError, OSError)
+_PYATV_NOT_CONNECTED_TO_REMOTE = "not connected to remote"
 
 
 def _load_pyatv() -> Any:
@@ -140,7 +141,13 @@ class RaopSender:
 
         close_errors = await _await_close_tasks(receiver)
         for close_error in close_errors:
-            if not isinstance(close_error, _REMOTE_CLOSE_ERRORS):
+            if not (
+                isinstance(close_error, _REMOTE_CLOSE_ERRORS)
+                or (
+                    type(close_error) is RuntimeError
+                    and str(close_error) == _PYATV_NOT_CONNECTED_TO_REMOTE
+                )
+            ):
                 raise close_error
 
 
