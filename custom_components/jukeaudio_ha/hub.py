@@ -2,6 +2,7 @@
 from collections.abc import Mapping
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
 
 from .juke_client import JukeAudioClientV3
@@ -27,6 +28,7 @@ class JukeAudioHub:
         self.group_inputs = {}
         self.client = None
         self.coordinator = None
+        self._entry_id = None
         self._server_device_id = None
 
     async def verify_connection(self) -> bool:
@@ -77,20 +79,45 @@ class JukeAudioHub:
 
     def _get_coordinator(self):
         """Return the coordinator associated with this hub, when available."""
-        if self.coordinator is not None:
-            return self.coordinator
-        if self._hass is None:
+        coordinator = self.coordinator
+        if coordinator is None:
             return None
-        for entry_data in getattr(self._hass, "data", {}).get(DOMAIN, {}).values():
-            if entry_data.get("hub") is self:
-                return entry_data.get("coordinator")
-        return None
+        if self._hass is None:
+            return coordinator
+        if self._entry_id is None:
+            return None
+
+        hass_data = getattr(self._hass, "data", {})
+        if not isinstance(hass_data, Mapping):
+            return None
+        domain_data = hass_data.get(DOMAIN)
+        if not isinstance(domain_data, Mapping):
+            return None
+        entry_data = domain_data.get(self._entry_id)
+        if not isinstance(entry_data, Mapping):
+            return None
+        if entry_data.get("hub") is not self:
+            return None
+        if entry_data.get("coordinator") is not coordinator:
+            return None
+        return coordinator
+
+    def invalidate_coordinator(self) -> None:
+        """Drop the entry-scoped coordinator before unloading this hub."""
+        self.coordinator = None
+        self._entry_id = None
 
     async def _refresh_after_write(self) -> None:
         """Refresh coordinator-backed state after a successful write."""
         coordinator = self._get_coordinator()
         if coordinator is not None:
-            await coordinator.async_request_refresh()
+            try:
+                await coordinator.async_request_refresh()
+            except AttributeError:
+                if self._get_coordinator() is None:
+                    LOGGER.debug("Juke coordinator became unavailable during unload")
+                    return
+                raise
 
     async def set_zone_mute(self, zone_id: str, muted: bool):
         """Mute or unmute a zone without changing its volume."""
@@ -138,7 +165,9 @@ class JukeAudioHub:
         The v3 client exposes scoped add/remove membership operations rather than
         a whole-input replacement endpoint. Compose those operations here so
         mappings for every other input remain untouched, and refresh once after
-        the complete successful write sequence.
+        the complete successful write sequence. Because the hardware API has no
+        atomic whole-input operation, compensate successful mutations if a later
+        transport call fails.
         """
         input_info = self.group_inputs.get(input_id)
         if input_info is None:
@@ -166,29 +195,64 @@ class JukeAudioHub:
         desired_ids = list(dict.fromkeys(zone_ids))
         desired_set = set(desired_ids)
         results = []
+        applied_operations = []
 
-        for zone_id in current_ids:
-            if zone_id not in desired_set:
-                results.append(
-                    await self.client.remove_input_zone(
-                        self._ip_address,
-                        self._username,
-                        self._password,
-                        input_id,
-                        zone_id,
+        try:
+            for zone_id in current_ids:
+                if zone_id not in desired_set:
+                    results.append(
+                        await self.client.remove_input_zone(
+                            self._ip_address,
+                            self._username,
+                            self._password,
+                            input_id,
+                            zone_id,
+                        )
                     )
-                )
-        for zone_id in desired_ids:
-            if zone_id not in current_set:
-                results.append(
-                    await self.client.add_input_zone(
-                        self._ip_address,
-                        self._username,
-                        self._password,
-                        input_id,
-                        zone_id,
+                    applied_operations.append(("remove", zone_id))
+            for zone_id in desired_ids:
+                if zone_id not in current_set:
+                    results.append(
+                        await self.client.add_input_zone(
+                            self._ip_address,
+                            self._username,
+                            self._password,
+                            input_id,
+                            zone_id,
+                        )
                     )
-                )
+                    applied_operations.append(("add", zone_id))
+        except Exception as err:
+            rollback_errors = []
+            for operation, zone_id in reversed(applied_operations):
+                try:
+                    if operation == "remove":
+                        await self.client.add_input_zone(
+                            self._ip_address,
+                            self._username,
+                            self._password,
+                            input_id,
+                            zone_id,
+                        )
+                    else:
+                        await self.client.remove_input_zone(
+                            self._ip_address,
+                            self._username,
+                            self._password,
+                            input_id,
+                            zone_id,
+                        )
+                except Exception as rollback_err:
+                    rollback_errors.append(rollback_err)
+
+            if rollback_errors:
+                raise HomeAssistantError(
+                    f"Failed to set input {input_id}: {err}; rollback failed: "
+                    f"{rollback_errors[0]}"
+                ) from err
+            raise HomeAssistantError(
+                f"Failed to set input {input_id}: {err}; rollback succeeded"
+            ) from err
 
         if results:
             await self._refresh_after_write()

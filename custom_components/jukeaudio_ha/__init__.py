@@ -35,6 +35,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hub.initialize()
 
     coordinator = JukeUpdateCoordinator(hass, hub, entry.data[CONF_SCAN_INTERVAL] if CONF_SCAN_INTERVAL in entry.data else 30)
+    hub.coordinator = coordinator
+    hub._entry_id = entry.entry_id
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {"hub": hub, "coordinator": coordinator}
 
@@ -48,10 +50,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
+        domain_data = hass.data[DOMAIN]
+        entry_data = domain_data.get(entry.entry_id)
+        if isinstance(entry_data, Mapping):
+            hub = entry_data.get("hub")
+            if isinstance(hub, JukeAudioHub):
+                hub.invalidate_coordinator()
+        domain_data.pop(entry.entry_id)
         if not any(
             isinstance(entry_data, Mapping) and "hub" in entry_data
-            for entry_data in hass.data[DOMAIN].values()
+            for entry_data in domain_data.values()
         ):
             await async_unload_services(hass)
 

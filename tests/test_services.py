@@ -94,6 +94,34 @@ class _FailingClient:
         raise AssertionError("add must not run after a failed removal")
 
 
+class _PartiallyFailingClient:
+    """Model route mutations and fail on selected transport attempts."""
+
+    def __init__(self, fail_on):
+        self.routes = {"input-a": ["zone-1", "zone-2"], "input-b": ["zone-3"]}
+        self.calls = []
+        self.fail_on = set(fail_on)
+        self.attempt = 0
+
+    def _record(self, operation, args):
+        self.attempt += 1
+        input_id, zone_id = args[-2:]
+        self.calls.append((operation, input_id, zone_id))
+        if self.attempt in self.fail_on:
+            raise RuntimeError("transport failed")
+
+    async def remove_input_zone(self, *args):
+        self._record(SERVICE_REMOVE_INPUT_ZONE, args)
+        self.routes[args[-2]].remove(args[-1])
+        return "removed"
+
+    async def add_input_zone(self, *args):
+        self._record(SERVICE_ADD_INPUT_ZONE, args)
+        if args[-1] not in self.routes[args[-2]]:
+            self.routes[args[-2]].append(args[-1])
+        return "added"
+
+
 class _FakeServices:
     def __init__(self) -> None:
         self.registered = {}
@@ -240,6 +268,34 @@ async def test_set_rejects_unknown_zone_before_write(hass_and_hub):
 
 
 @pytest.mark.asyncio
+async def test_invalid_zone_validation_does_not_write_external_client():
+    """Invalid route input is rejected before a client mutation is attempted."""
+    hub = JukeAudioHub(None, "juke.local", "alice", "secret")
+    hub.group_inputs = {
+        "input-a": {
+            "input_id": "input-a",
+            "input_class": 0,
+            "zones": ["zone-1"],
+        }
+    }
+    hub.jukes = {
+        "amp-1": SimpleNamespace(
+            zones={"zone-1": {"zone_id": "zone-1", "name": "Living Room"}}
+        )
+    }
+    client = _PartiallyFailingClient({1})
+    hub.client = client
+
+    with pytest.raises(HomeAssistantError, match="Unknown zone"):
+        await async_set_input_zones(
+            _call({"input_id": "input-a", "zone_ids": ["missing"]}),
+            hub=hub,
+        )
+
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
 async def test_service_registration_is_idempotent_and_unload_removes_handlers(
     hass_and_hub,
 ):
@@ -288,6 +344,25 @@ async def test_entry_unload_removes_services_only_after_last_hub(hass_and_hub):
 
 
 @pytest.mark.asyncio
+async def test_entry_unload_invalidates_hub_coordinator_before_data_removal():
+    """Unloading removes the hub's direct refresh reference before its entry."""
+    coordinator = _FakeCoordinator()
+    hub = JukeAudioHub(None, "juke.local", "alice", "secret")
+    hub._entry_id = "entry-1"
+    hub.coordinator = coordinator
+    hass = SimpleNamespace(
+        data={DOMAIN: {"entry-1": {"hub": hub, "coordinator": coordinator}}},
+        services=_FakeServices(),
+        config_entries=_FakeConfigEntries(),
+    )
+
+    assert await async_unload_entry(hass, SimpleNamespace(entry_id="entry-1")) is True
+
+    assert hub.coordinator is None
+    assert "entry-1" not in hass.data[DOMAIN]
+
+
+@pytest.mark.asyncio
 async def test_hub_set_input_zones_changes_only_named_input_and_refreshes():
     """Hub replacement is composed from scoped membership writes."""
     hub = JukeAudioHub(None, "juke.local", "alice", "secret")
@@ -323,7 +398,47 @@ async def test_hub_set_input_zones_does_not_refresh_when_a_write_fails():
     hub.client = _FailingClient()
     hub.coordinator = _FakeCoordinator()
 
-    with pytest.raises(RuntimeError, match="write failed"):
+    with pytest.raises(HomeAssistantError, match="rollback succeeded"):
         await hub.set_input_zones("input-a", ["zone-2"])
 
+    assert hub.coordinator.refreshes == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fail_on", "rollback_message"),
+    [({2}, "rollback succeeded"), ({2, 3}, "rollback failed")],
+)
+async def test_hub_set_input_zones_rolls_back_only_named_input_after_failure(
+    fail_on, rollback_message
+):
+    """A partial route write attempts to restore the exact cached mapping."""
+    hub = JukeAudioHub(None, "juke.local", "alice", "secret")
+    hub.group_inputs = {
+        "input-a": {
+            "input_id": "input-a",
+            "input_class": 0,
+            "zones": ["zone-1", "zone-2"],
+        },
+        "input-b": {
+            "input_id": "input-b",
+            "input_class": 0,
+            "zones": ["zone-3"],
+        },
+    }
+    client = _PartiallyFailingClient(fail_on)
+    hub.client = client
+    hub.coordinator = _FakeCoordinator()
+
+    with pytest.raises(HomeAssistantError, match=rollback_message):
+        await hub.set_input_zones("input-a", ["zone-3"])
+
+    assert client.calls == [
+        (SERVICE_REMOVE_INPUT_ZONE, "input-a", "zone-1"),
+        (SERVICE_REMOVE_INPUT_ZONE, "input-a", "zone-2"),
+        (SERVICE_ADD_INPUT_ZONE, "input-a", "zone-1"),
+    ]
+    expected_route = ["zone-2", "zone-1"] if fail_on == {2} else ["zone-2"]
+    assert client.routes["input-a"] == expected_route
+    assert client.routes["input-b"] == ["zone-3"]
     assert hub.coordinator.refreshes == 0

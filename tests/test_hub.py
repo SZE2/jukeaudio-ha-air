@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from custom_components.jukeaudio_ha.const import DOMAIN
 from custom_components.jukeaudio_ha.hub import JukeAudioHub
 
 
@@ -169,3 +170,46 @@ async def test_set_zone_based_input_enabled_delegates_and_refreshes(hub_and_fake
         )
     ]
     assert coordinator.refreshes == 1
+
+
+@pytest.mark.asyncio
+async def test_successful_write_does_not_cross_refresh_after_entry_unload():
+    """A completed write is safe when its entry is already being removed."""
+    other_coordinator = _FakeCoordinator()
+    other_hub = JukeAudioHub(None, "other.local", "bob", "secret")
+    hass = type(
+        "FakeHass",
+        (),
+        {
+            "data": {
+                DOMAIN: {
+                    "entry-2": {"hub": other_hub, "coordinator": other_coordinator},
+                    "_routing_services_registered": True,
+                }
+            }
+        },
+    )()
+    hub = JukeAudioHub(hass, "juke.local", "alice", "secret")
+    hub._entry_id = "entry-1"
+    hub.client = _FakeClient()
+    hub.coordinator = None
+
+    await hub.set_zone_mute("zone-1", True)
+
+    assert hub.client.calls == [
+        ("set_zone_mute", ("juke.local", "alice", "secret", "zone-1", True))
+    ]
+    assert other_coordinator.refreshes == 0
+
+
+def test_get_coordinator_ignores_boolean_service_marker():
+    """Service metadata is not treated as a config-entry mapping."""
+    hass = type(
+        "FakeHass",
+        (),
+        {"data": {DOMAIN: {"_routing_services_registered": True}}},
+    )()
+    hub = JukeAudioHub(hass, "juke.local", "alice", "secret")
+    hub._entry_id = "entry-1"
+
+    assert hub._get_coordinator() is None
