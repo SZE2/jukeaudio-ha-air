@@ -189,6 +189,36 @@ async def test_stream_rejects_alternate_loopback_spellings_even_when_allowlisted
     assert sender.calls == []
 
 
+async def test_stream_rejects_short_and_legacy_numeric_loopback_spellings_even_when_allowlisted() -> None:
+    sender = FakeSender()
+    legacy_loopback_hosts = (
+        "127.1",
+        "127.0.1",
+        "0177.0.0.1",
+        "0x7f.0.0.1",
+    )
+    app = create_app(
+        targets={"zone-alpha": _target()},
+        bearer_token=_TEST_TOKEN,
+        allowed_media_hosts={_MEDIA_HOST, *legacy_loopback_hosts},
+        sender_factory=_sender_factory(sender),
+    )
+    headers = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+
+    async with TestServer(app) as server:
+        async with TestClient(server) as client:
+            for host in legacy_loopback_hosts:
+                response = await client.post(
+                    "/v1/streams",
+                    json={"zone_id": "zone-alpha", "media_url": f"http://{host}/audio.wav"},
+                    headers=headers,
+                )
+                assert response.status == 400
+                assert await response.json() == {"error": "invalid request"}
+
+    assert sender.calls == []
+
+
 async def test_stream_rejects_unsafe_or_unapproved_media_urls_before_sender() -> None:
     sender = FakeSender()
     app = create_app(

@@ -80,7 +80,7 @@ test is part of this source package's automated verification.
 
 The control plane accepts only a strict exact `zone_id` and an absolute
 `http://` or `https://` media URL whose hostname is in the explicitly supplied
-allowlist. It rejects loopback hosts, including common alternate IPv4 spellings,
+allowlist. It rejects loopback hosts, including legacy numeric IPv4 forms,
 before allowlist matching. It passes the approved URL string unchanged to the
 injected/production RAOP sender. When the sender calls pyatv's
 `receiver.stream.stream_file`, pyatv's RAOP source implementation owns retrieval
