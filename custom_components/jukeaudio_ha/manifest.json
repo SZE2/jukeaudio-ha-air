@@ -2,18 +2,18 @@
   "domain": "jukeaudio_ha",
   "name": "Juke Audio",
   "codeowners": [
-    "@pkarimov"
+    "@SZE2"
   ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/pkarimov/jukeaudio_ha/blob/main/README.md",
+  "documentation": "https://github.com/SZE2/jukeaudio_ha/blob/main/README.md",
   "homekit": {},
   "integration_type": "hub",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/pkarimov/jukeaudio_ha/issues",
+  "issue_tracker": "https://github.com/SZE2/jukeaudio_ha/issues",
   "loggers": ["jukeaudio"],
   "requirements": ["jukeaudio==0.0.11", "pyatv==0.18.0"],
   "ssdp": [],
-  "version": "0.0.10",
+  "version": "0.0.13",
   "zeroconf": []
 }

@@ -1,5 +1,5 @@
 {
-    "name": "pkarimov/jukeaudio_ha",
+    "name": "SZE2/jukeaudio_ha",
     "image": "mcr.microsoft.com/vscode/devcontainers/python:3.13",
     "postCreateCommand": "scripts/setup",
     "appPort": ["8123:8123"],
