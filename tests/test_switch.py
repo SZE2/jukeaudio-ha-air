@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 from homeassistant.components.switch import SwitchEntity
 
-from custom_components.jukeaudio_ha.const import DOMAIN
-from custom_components.jukeaudio_ha.switch import async_setup_entry
+from custom_components.jukeaudio_ha_air.const import DOMAIN
+from custom_components.jukeaudio_ha_air.switch import async_setup_entry
 
 
 class _FakeHub:
@@ -195,6 +195,6 @@ def test_switch_platform_is_registered_without_removing_existing_platforms():
     """The switch platform is forwarded alongside the existing platforms."""
     from homeassistant.const import Platform
 
-    from custom_components.jukeaudio_ha import PLATFORMS
+    from custom_components.jukeaudio_ha_air import PLATFORMS
 
     assert PLATFORMS == [Platform.SENSOR, Platform.MEDIA_PLAYER, Platform.SWITCH]

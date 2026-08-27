@@ -7,10 +7,10 @@ from types import SimpleNamespace
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.jukeaudio_ha import async_unload_entry
-from custom_components.jukeaudio_ha.const import DOMAIN
-from custom_components.jukeaudio_ha.hub import JukeAudioHub
-from custom_components.jukeaudio_ha.services import (
+from custom_components.jukeaudio_ha_air import async_unload_entry
+from custom_components.jukeaudio_ha_air.const import DOMAIN
+from custom_components.jukeaudio_ha_air.hub import JukeAudioHub
+from custom_components.jukeaudio_ha_air.services import (
     SERVICE_ADD_INPUT_ZONE,
     SERVICE_REMOVE_INPUT_ZONE,
     SERVICE_SET_INPUT_ZONES,

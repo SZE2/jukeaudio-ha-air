@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from custom_components.jukeaudio_ha.const import DOMAIN
-from custom_components.jukeaudio_ha.hub import JukeAudioHub
+from custom_components.jukeaudio_ha_air.const import DOMAIN
+from custom_components.jukeaudio_ha_air.hub import JukeAudioHub
 
 
 class _FakeCoordinator:

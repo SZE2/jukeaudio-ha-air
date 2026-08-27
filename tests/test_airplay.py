@@ -6,7 +6,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from custom_components.jukeaudio_ha.airplay import (
+from custom_components.jukeaudio_ha_air.airplay import (
     AirPlayMappingError,
     dump_airplay_targets,
     load_airplay_targets,

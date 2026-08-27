@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from homeassistant.components.media_player import MediaPlayerEntityFeature, MediaPlayerState
 
-from custom_components.jukeaudio_ha.airplay import dump_airplay_targets, load_airplay_targets
-from custom_components.jukeaudio_ha.const import CONF_AIRPLAY_TARGETS
-from custom_components.jukeaudio_ha.media_player import Zone
+from custom_components.jukeaudio_ha_air.airplay import dump_airplay_targets, load_airplay_targets
+from custom_components.jukeaudio_ha_air.const import CONF_AIRPLAY_TARGETS
+from custom_components.jukeaudio_ha_air.media_player import Zone
 
 
 ZONE_ID = "zone-1"
@@ -169,7 +169,7 @@ async def test_zone_play_media_uses_integrated_raop_without_mutating_juke(monkey
     """Direct playback forwards the exact URL and leaves Juke state untouched."""
     sender_call = AsyncMock()
     monkeypatch.setattr(
-        "custom_components.jukeaudio_ha.media_player.DirectRaopClient.async_play_media",
+        "custom_components.jukeaudio_ha_air.media_player.DirectRaopClient.async_play_media",
         sender_call,
     )
     config_entry = SimpleNamespace(

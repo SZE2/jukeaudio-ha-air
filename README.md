@@ -13,10 +13,19 @@
 > **Do not open issues or request support from the original project for this
 > fork's experimental changes.**
 
-This repository contains one HACS integration for Juke Audio multi-zone amplifiers.
-The fork retains Juke connection, zone controls, and routing behavior while adding
-an experimental optional direct RAOP sender. There is no separate helper service to
-install or configure.
+This repository contains one **separately installable** HACS integration for Juke
+Audio multi-zone amplifiers. Its Home Assistant domain is
+`jukeaudio_ha_air`, intentionally distinct from the upstream
+`jukeaudio_ha` domain, so the experimental fork never shares or overwrites the
+upstream component directory. The fork retains Juke connection, zone controls,
+and routing behavior while adding an experimental optional direct RAOP sender.
+There is no separate helper service to install or configure.
+
+> [!IMPORTANT]
+> This fork requires its own Home Assistant config entry. Do not run its Juke
+> controls alongside an upstream Juke entry in normal use: both entries expose
+> the same physical amplifier. The distinct domain prevents file collisions; it
+> does not make duplicate control planes desirable.
 
 ## Install HACS
 

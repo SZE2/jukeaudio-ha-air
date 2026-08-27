@@ -7,7 +7,7 @@ debugpy:
 logger:
   default: info
   logs:
-    custom_components.jukeaudio_ha: debug
+    custom_components.jukeaudio_ha_air: debug
     jukeaudio: debug
 
 # Load frontend themes from the themes folder

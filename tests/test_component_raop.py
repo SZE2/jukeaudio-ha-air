@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import pytest
 from homeassistant import config_entries
 
-from custom_components.jukeaudio_ha import airplay
-from custom_components.jukeaudio_ha.config_flow import ConfigFlow
+from custom_components.jukeaudio_ha_air import airplay
+from custom_components.jukeaudio_ha_air.config_flow import ConfigFlow
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -49,10 +49,20 @@ def _entry(options: object | None = None) -> SimpleNamespace:
 
 def test_manifest_declares_pure_python_raop_runtime_dependency() -> None:
     manifest = json.loads(
-        (REPOSITORY_ROOT / "custom_components/jukeaudio_ha/manifest.json").read_text()
+        (REPOSITORY_ROOT / "custom_components/jukeaudio_ha_air/manifest.json").read_text()
     )
 
     assert "pyatv==0.18.0" in manifest["requirements"]
+
+
+def test_fork_has_an_isolated_hacs_component_domain() -> None:
+    """The fork must never share the upstream component install path."""
+    component_root = REPOSITORY_ROOT / "custom_components/jukeaudio_ha_air"
+    manifest = json.loads((component_root / "manifest.json").read_text())
+
+    assert manifest["domain"] == "jukeaudio_ha_air"
+    assert manifest["name"] == "Juke Audio Air (Experimental)"
+    assert not (REPOSITORY_ROOT / "custom_components/jukeaudio_ha").exists()
 
 
 def test_options_flow_exposes_only_integrated_raop_mapping() -> None:
@@ -66,7 +76,7 @@ def test_options_flow_exposes_only_integrated_raop_mapping() -> None:
 
 def test_component_translation_surface_has_no_legacy_helper_options() -> None:
     """The HACS UI exposes only the integrated target mapping option."""
-    component_root = REPOSITORY_ROOT / "custom_components/jukeaudio_ha"
+    component_root = REPOSITORY_ROOT / "custom_components/jukeaudio_ha_air"
     for translation in (component_root / "strings.json", *sorted((component_root / "translations").glob("*.json"))):
         text = translation.read_text()
         assert "helper_base_url" not in text
@@ -76,7 +86,7 @@ def test_component_translation_surface_has_no_legacy_helper_options() -> None:
 
 def test_separate_helper_runtime_is_not_shipped() -> None:
     """The HACS deliverable contains no separate helper runtime."""
-    component_root = REPOSITORY_ROOT / "custom_components/jukeaudio_ha"
+    component_root = REPOSITORY_ROOT / "custom_components/jukeaudio_ha_air"
     assert not (REPOSITORY_ROOT / "airplay_helper").exists()
     assert not (component_root / "airplay_helper.py").exists()
 

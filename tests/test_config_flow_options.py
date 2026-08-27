@@ -8,9 +8,9 @@ from types import SimpleNamespace
 import pytest
 from homeassistant import config_entries
 
-from custom_components.jukeaudio_ha.airplay import dump_airplay_targets, load_airplay_targets
-from custom_components.jukeaudio_ha.config_flow import ConfigFlow
-from custom_components.jukeaudio_ha.const import CONF_AIRPLAY_TARGETS
+from custom_components.jukeaudio_ha_air.airplay import dump_airplay_targets, load_airplay_targets
+from custom_components.jukeaudio_ha_air.config_flow import ConfigFlow
+from custom_components.jukeaudio_ha_air.const import CONF_AIRPLAY_TARGETS
 
 
 def _entry(options=None):
