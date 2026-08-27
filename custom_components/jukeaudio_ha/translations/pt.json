@@ -18,5 +18,17 @@
                 }
             }
         }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "airplay_targets": "Mapeamento de destino AirPlay (JSON)"
+                }
+            }
+        },
+        "error": {
+            "invalid_target_mapping": "Introduza um objeto JSON de mapeamento AirPlay explícito válido."
+        }
     }
 }

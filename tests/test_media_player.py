@@ -9,11 +9,7 @@ import pytest
 from homeassistant.components.media_player import MediaPlayerEntityFeature, MediaPlayerState
 
 from custom_components.jukeaudio_ha.airplay import dump_airplay_targets, load_airplay_targets
-from custom_components.jukeaudio_ha.airplay_helper import (
-    CONF_AIRPLAY_TARGETS,
-    CONF_HELPER_BASE_URL,
-    CONF_HELPER_BEARER_TOKEN,
-)
+from custom_components.jukeaudio_ha.const import CONF_AIRPLAY_TARGETS
 from custom_components.jukeaudio_ha.media_player import Zone
 
 
@@ -29,28 +25,6 @@ class _FakeZoneHub:
 
     async def set_zone_volume(self, zone_id, volume):
         self.calls.append(("set_zone_volume", zone_id, volume))
-
-
-class _FakeResponse:
-    status = 202
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, traceback):
-        return None
-
-    async def json(self):
-        return {"job_id": "opaque-job", "status": "running"}
-
-
-class _FakeSession:
-    def __init__(self):
-        self.calls = []
-
-    def post(self, url, **kwargs):
-        self.calls.append((url, kwargs))
-        return _FakeResponse()
 
 
 def _make_zone(zone_data, hub=None, *, zone_id=ZONE_ID, config_entry=None):
@@ -133,11 +107,9 @@ def test_zone_supported_features_include_volume_mute():
 
 
 def test_zone_advertises_play_media_only_for_exact_raop_mapping():
-    """Only a valid explicit RAOP mapping enables direct helper playback."""
+    """Zones advertise direct playback only for an exact RAOP fallback target."""
     config_entry = SimpleNamespace(
         options={
-            CONF_HELPER_BASE_URL: "https://helper.example",
-            CONF_HELPER_BEARER_TOKEN: "fixture-token",
             CONF_AIRPLAY_TARGETS: dump_airplay_targets(
                 load_airplay_targets(
                     {
@@ -177,11 +149,11 @@ def test_zone_advertises_play_media_only_for_exact_raop_mapping():
     "options",
     [
         {},
-        {CONF_HELPER_BASE_URL: "https://helper.example", CONF_HELPER_BEARER_TOKEN: "fixture-token", CONF_AIRPLAY_TARGETS: []},
-        {CONF_HELPER_BASE_URL: "https://helper.example/path", CONF_HELPER_BEARER_TOKEN: "fixture-token", CONF_AIRPLAY_TARGETS: {}},
+        {CONF_AIRPLAY_TARGETS: []},
+        {CONF_AIRPLAY_TARGETS: {"zone-1": {"zone_id": "wrong"}}},
     ],
 )
-def test_zone_hides_play_media_when_helper_options_are_not_valid(options):
+def test_zone_hides_play_media_when_raop_options_are_not_valid(options):
     """Incomplete or malformed options keep a zone control-only."""
     zone = _make_zone(
         {"name": "Living Room", "volume": 42, "muted": False, "enabled": True, "active_input": None},
@@ -193,17 +165,15 @@ def test_zone_hides_play_media_when_helper_options_are_not_valid(options):
 
 
 @pytest.mark.asyncio
-async def test_zone_play_media_uses_helper_without_mutating_juke(monkeypatch):
+async def test_zone_play_media_uses_integrated_raop_without_mutating_juke(monkeypatch):
     """Direct playback forwards the exact URL and leaves Juke state untouched."""
-    session = _FakeSession()
+    sender_call = AsyncMock()
     monkeypatch.setattr(
-        "custom_components.jukeaudio_ha.airplay_helper.async_get_clientsession",
-        lambda hass: session,
+        "custom_components.jukeaudio_ha.media_player.DirectRaopClient.async_play_media",
+        sender_call,
     )
     config_entry = SimpleNamespace(
         options={
-            CONF_HELPER_BASE_URL: "https://helper.example",
-            CONF_HELPER_BEARER_TOKEN: "fixture-token",
             CONF_AIRPLAY_TARGETS: dump_airplay_targets(
                 load_airplay_targets(
                     {
@@ -224,23 +194,11 @@ async def test_zone_play_media_uses_helper_without_mutating_juke(monkeypatch):
         hub,
         config_entry=config_entry,
     )
-    zone.hass = SimpleNamespace()
     before = dict(zone._juke.zones[ZONE_ID])
 
     await zone.async_play_media("audio/mpeg", "https://media.example/exact.mp3")
 
-    assert session.calls == [
-        (
-            "https://helper.example/v1/streams",
-            {
-                "json": {
-                    "zone_id": "zone-1",
-                    "media_url": "https://media.example/exact.mp3",
-                },
-                "headers": {"Authorization": "Bearer fixture-token"},
-            },
-        )
-    ]
+    sender_call.assert_awaited_once_with(ZONE_ID, "https://media.example/exact.mp3")
     assert hub.calls == []
     assert zone._juke.zones[ZONE_ID] == before
 

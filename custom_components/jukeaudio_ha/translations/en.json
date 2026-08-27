@@ -23,16 +23,12 @@
         "step": {
             "init": {
                 "data": {
-                    "helper_base_url": "RAOP helper base URL",
-                    "airplay_targets": "AirPlay target mapping (JSON)",
-                    "helper_bearer_token": "RAOP helper bearer token (leave blank to keep current)"
+                    "airplay_targets": "AirPlay target mapping (JSON)"
                 }
             }
         },
         "error": {
-            "invalid_helper_base_url": "Enter an absolute HTTP(S) helper origin with no path, query, or credentials.",
-            "invalid_target_mapping": "Enter a valid explicit AirPlay target mapping JSON object.",
-            "required": "A bearer token is required for first-time helper setup."
+            "invalid_target_mapping": "Enter a valid explicit AirPlay target mapping JSON object."
         }
     }
 }

@@ -16,14 +16,8 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN, LOGGER
+from .const import CONF_AIRPLAY_TARGETS, DOMAIN, LOGGER
 from .airplay import AirPlayMappingError, dump_airplay_targets, load_airplay_targets
-from .airplay_helper import (
-    CONF_AIRPLAY_TARGETS,
-    CONF_HELPER_BASE_URL,
-    CONF_HELPER_BEARER_TOKEN,
-    validate_helper_base_url,
-)
 from .hub import JukeAudioHub
 from jukeaudio.exceptions import AuthenticationException, UnexpectedException
 
@@ -87,7 +81,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
-        """Return the options flow for helper configuration."""
+        """Return the options flow for integrated RAOP configuration."""
         return OptionsFlowHandler(config_entry)
 
     async def async_step_user(
@@ -143,13 +137,13 @@ class InvalidUpdateInterval(HomeAssistantError):
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
-    """Configure the separately managed RAOP helper."""
+    """Configure explicit in-process RAOP target mappings."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
 
     def _schema(self) -> vol.Schema:
-        """Build a form that never defaults the stored bearer token."""
+        """Build the mapping form from the current explicit targets."""
         options = self._config_entry.options
         target_mapping = options.get(CONF_AIRPLAY_TARGETS, {})
         if isinstance(target_mapping, Mapping):
@@ -158,27 +152,17 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             targets_default = "{}"
         return vol.Schema(
             {
-                vol.Required(
-                    CONF_HELPER_BASE_URL,
-                    default=options.get(CONF_HELPER_BASE_URL, ""),
-                ): str,
                 vol.Required(CONF_AIRPLAY_TARGETS, default=targets_default): str,
-                vol.Optional(CONF_HELPER_BEARER_TOKEN, default=""): str,
             }
         )
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle helper options."""
+        """Handle integrated RAOP options."""
         errors: dict[str, str] = {}
+        target_mapping = None
         if user_input is not None:
-            try:
-                base_url = validate_helper_base_url(user_input.get(CONF_HELPER_BASE_URL))
-            except (TypeError, ValueError):
-                errors[CONF_HELPER_BASE_URL] = "invalid_helper_base_url"
-                base_url = None
-
             try:
                 decoded_mapping = json.loads(
                     user_input.get(CONF_AIRPLAY_TARGETS, ""),
@@ -188,26 +172,18 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 target_mapping = dump_airplay_targets(targets)
             except (AirPlayMappingError, TypeError, ValueError, json.JSONDecodeError):
                 errors[CONF_AIRPLAY_TARGETS] = "invalid_target_mapping"
-                target_mapping = None
-
-            supplied_token = user_input.get(CONF_HELPER_BEARER_TOKEN, "")
-            existing_token = self._config_entry.options.get(CONF_HELPER_BEARER_TOKEN)
-            token = supplied_token if isinstance(supplied_token, str) else ""
-            if not token.strip():
-                token = existing_token if isinstance(existing_token, str) else ""
-            if not token.strip():
-                errors[CONF_HELPER_BEARER_TOKEN] = "required"
 
             if not errors:
-                options = dict(self._config_entry.options)
-                options.update(
-                    {
-                        CONF_HELPER_BASE_URL: base_url,
-                        CONF_AIRPLAY_TARGETS: target_mapping,
-                        CONF_HELPER_BEARER_TOKEN: token,
-                    }
+                options = {
+                    key: value
+                    for key, value in self._config_entry.options.items()
+                    if not (isinstance(key, str) and key.startswith("helper_"))
+                }
+                options[CONF_AIRPLAY_TARGETS] = target_mapping
+                return self.async_create_entry(
+                    title="",
+                    data=options,
                 )
-                return self.async_create_entry(title="", data=options)
 
         return self.async_show_form(
             step_id="init", data_schema=self._schema(), errors=errors

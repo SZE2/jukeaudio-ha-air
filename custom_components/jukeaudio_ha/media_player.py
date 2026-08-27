@@ -12,7 +12,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .airplay_helper import AirPlayHelperClient, has_raop_target
+from .airplay import DirectRaopClient, has_raop_target
 from .const import DOMAIN, LOGGER
 from .hub import JukeAudioHub, JukeAudioDevice
 
@@ -179,8 +179,8 @@ class Zone(JukeAudioMediaPlayerBase):
         return features
 
     async def async_play_media(self, media_type: str, media_id: str, **kwargs: object) -> None:
-        """Submit a direct HTTP(S) media URL to the configured RAOP helper."""
-        await AirPlayHelperClient(self.hass, self._config_entry).async_play_media(
+        """Stream a validated HTTP(S) media URL directly through RAOP."""
+        await DirectRaopClient(self._config_entry).async_play_media(
             self._zone_id, media_id
         )
 

@@ -1,4 +1,4 @@
-"""Tests for explicit RAOP helper options configuration."""
+"""Tests for explicit integrated RAOP target options."""
 
 from __future__ import annotations
 
@@ -9,19 +9,20 @@ import pytest
 from homeassistant import config_entries
 
 from custom_components.jukeaudio_ha.airplay import dump_airplay_targets, load_airplay_targets
-from custom_components.jukeaudio_ha.airplay_helper import (
-    CONF_AIRPLAY_TARGETS,
-    CONF_HELPER_BASE_URL,
-    CONF_HELPER_BEARER_TOKEN,
-)
 from custom_components.jukeaudio_ha.config_flow import ConfigFlow
+from custom_components.jukeaudio_ha.const import CONF_AIRPLAY_TARGETS
 
 
 def _entry(options=None):
     return SimpleNamespace(
         entry_id="entry-1",
-        data={"host": "juke.example", "username": "Admin", "password": "fixture-password", "scan_interval": 30},
-        options=options or {},
+        data={
+            "host": "juke.example",
+            "username": "Admin",
+            "password": "fixture-password",
+            "scan_interval": 30,
+        },
+        options={} if options is None else options,
     )
 
 
@@ -43,13 +44,13 @@ def _target_mapping_json() -> str:
 
 
 @pytest.mark.asyncio
-async def test_options_flow_form_keeps_existing_bearer_token_blank():
-    """An options form never renders an already configured bearer token."""
+async def test_options_flow_exposes_only_integrated_raop_mapping():
+    """The options UI has no helper URL, token, listener, or job fields."""
     flow = ConfigFlow.async_get_options_flow(
         _entry(
             {
-                CONF_HELPER_BASE_URL: "https://helper.example",
-                CONF_HELPER_BEARER_TOKEN: "fixture-bearer-token",
+                "helper_base_url": "https://old-helper.example",
+                "helper_bearer_token": "fixture-token",
                 CONF_AIRPLAY_TARGETS: {},
             }
         )
@@ -59,16 +60,13 @@ async def test_options_flow_form_keeps_existing_bearer_token_blank():
     result = await flow.async_step_init()
 
     assert result["type"] == "form"
-    schema = result["data_schema"]
-    token_field = next(
-        key for key in schema.schema if getattr(key, "schema", None) == CONF_HELPER_BEARER_TOKEN
-    )
-    assert token_field.default() == ""
+    fields = {key.schema for key in result["data_schema"].schema}
+    assert fields == {CONF_AIRPLAY_TARGETS}
 
 
 @pytest.mark.asyncio
-async def test_blank_token_preserves_existing_options_and_data():
-    """Saving helper options with a blank token preserves the old token."""
+async def test_options_save_preserves_unrelated_options_and_discards_legacy_values():
+    """Saving targets preserves unrelated options but removes old helper values."""
     original_data = {
         "host": "juke.example",
         "username": "Admin",
@@ -77,8 +75,8 @@ async def test_blank_token_preserves_existing_options_and_data():
     }
     entry = _entry(
         {
-            CONF_HELPER_BASE_URL: "https://old-helper.example",
-            CONF_HELPER_BEARER_TOKEN: "fixture-existing-token",
+            "helper_base_url": "https://old-helper.example",
+            "helper_bearer_token": "fixture-existing-token",
             CONF_AIRPLAY_TARGETS: {},
             "unrelated": "preserved",
         }
@@ -86,39 +84,25 @@ async def test_blank_token_preserves_existing_options_and_data():
     entry.data = dict(original_data)
     flow = ConfigFlow.async_get_options_flow(entry)
 
-    result = await flow.async_step_init(
-        {
-            CONF_HELPER_BASE_URL: "https://helper.example/",
-            CONF_AIRPLAY_TARGETS: _target_mapping_json(),
-            CONF_HELPER_BEARER_TOKEN: "",
-        }
-    )
+    result = await flow.async_step_init({CONF_AIRPLAY_TARGETS: _target_mapping_json()})
 
-    assert result["type"] == "create_entry"
-    assert result["data"][CONF_HELPER_BASE_URL] == "https://helper.example"
-    assert result["data"][CONF_HELPER_BEARER_TOKEN] == "fixture-existing-token"
-    assert result["data"][CONF_AIRPLAY_TARGETS] == dump_airplay_targets(
+    expected_targets = dump_airplay_targets(
         load_airplay_targets(json.loads(_target_mapping_json()))
     )
-    assert result["data"]["unrelated"] == "preserved"
+    assert result["type"] == "create_entry"
+    assert result["data"] == {"unrelated": "preserved", CONF_AIRPLAY_TARGETS: expected_targets}
     assert entry.data == original_data
 
 
 @pytest.mark.asyncio
-async def test_first_options_setup_requires_bearer_token():
-    """The first helper setup cannot be saved without a token."""
+async def test_empty_target_mapping_is_valid_for_initial_options_setup():
+    """Users may save options before assigning a receiver to any zone."""
     flow = ConfigFlow.async_get_options_flow(_entry())
 
-    result = await flow.async_step_init(
-        {
-            CONF_HELPER_BASE_URL: "https://helper.example",
-            CONF_AIRPLAY_TARGETS: "{}",
-            CONF_HELPER_BEARER_TOKEN: "",
-        }
-    )
+    result = await flow.async_step_init({CONF_AIRPLAY_TARGETS: "{}"})
 
-    assert result["type"] == "form"
-    assert result["errors"] == {CONF_HELPER_BEARER_TOKEN: "required"}
+    assert result["type"] == "create_entry"
+    assert result["data"] == {CONF_AIRPLAY_TARGETS: {}}
 
 
 @pytest.mark.asyncio
@@ -126,13 +110,7 @@ async def test_malformed_target_mapping_is_rejected():
     """Options reject malformed mapping JSON instead of persisting it."""
     flow = ConfigFlow.async_get_options_flow(_entry())
 
-    result = await flow.async_step_init(
-        {
-            CONF_HELPER_BASE_URL: "https://helper.example",
-            CONF_AIRPLAY_TARGETS: "not-json",
-            CONF_HELPER_BEARER_TOKEN: "fixture-token",
-        }
-    )
+    result = await flow.async_step_init({CONF_AIRPLAY_TARGETS: "not-json"})
 
     assert result["type"] == "form"
     assert result["errors"] == {CONF_AIRPLAY_TARGETS: "invalid_target_mapping"}
@@ -145,13 +123,7 @@ async def test_duplicate_target_mapping_keys_are_rejected():
     duplicate_mapping = "{" + valid_mapping[1:-1] + "," + valid_mapping[1:-1] + "}"
     flow = ConfigFlow.async_get_options_flow(_entry())
 
-    result = await flow.async_step_init(
-        {
-            CONF_HELPER_BASE_URL: "https://helper.example",
-            CONF_AIRPLAY_TARGETS: duplicate_mapping,
-            CONF_HELPER_BEARER_TOKEN: "fixture-token",
-        }
-    )
+    result = await flow.async_step_init({CONF_AIRPLAY_TARGETS: duplicate_mapping})
 
     assert result["type"] == "form"
     assert result["errors"] == {CONF_AIRPLAY_TARGETS: "invalid_target_mapping"}
