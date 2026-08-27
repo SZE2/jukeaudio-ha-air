@@ -1,9 +1,22 @@
-# Juke Audio Home Assistant Integration
+# Juke Audio Home Assistant Integration — Experimental Fork
+
+> [!WARNING]
+> **Work in progress — do not rely on this fork for normal use, production
+> automations, or unattended audio.** It is an experimental fork of
+> [pkarimov/jukeaudio_ha](https://github.com/pkarimov/jukeaudio_ha), created to
+> develop and assess optional in-process RAOP playback. For a supported baseline,
+> installation guidance, and ordinary Juke control, use the
+> [original Juke Audio integration](https://github.com/pkarimov/jukeaudio_ha).
+>
+> This repository is not affiliated with or endorsed by the original author.
+>
+> **Do not open issues or request support from the original project for this
+> fork's experimental changes.**
 
 This repository contains one HACS integration for Juke Audio multi-zone amplifiers.
-The integration owns the Juke connection, zone controls, routing services, and the
-optional direct RAOP sender. There is no separate helper service to install or
-configure.
+The fork retains Juke connection, zone controls, and routing behavior while adding
+an experimental optional direct RAOP sender. There is no separate helper service to
+install or configure.
 
 ## Install HACS
 
