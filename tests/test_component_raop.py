@@ -16,7 +16,12 @@ from custom_components.jukeaudio_ha.config_flow import ConfigFlow
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _record(*, zone_id: str = "zone-1", protocol_mode: str = "raop_fallback") -> dict[str, object]:
+def _record(
+    *,
+    zone_id: str = "zone-1",
+    protocol_mode: str = "raop_fallback",
+    txt: dict[str, str] | None = None,
+) -> dict[str, object]:
     return {
         "zone_id": zone_id,
         "host": "receiver.example",
@@ -24,7 +29,7 @@ def _record(*, zone_id: str = "zone-1", protocol_mode: str = "raop_fallback") ->
         "device_id": "AA:BB:CC:DD:EE:01",
         "player_uuid": "player-1",
         "service_name": "Living Receiver",
-        "txt": {"deviceid": "AA:BB:CC:DD:EE:01", "sr": "44100"},
+        "txt": txt or {"deviceid": "AA:BB:CC:DD:EE:01", "sr": "44100"},
         "protocol_mode": protocol_mode,
     }
 
@@ -137,17 +142,20 @@ class _FakeStream:
     async def stream_file(self, source: str) -> None:
         self.receiver.sources.append(source)
         self.receiver.started.set()
+        if self.receiver.stream_error is not None:
+            raise self.receiver.stream_error
         await self.receiver.release.wait()
 
 
 class _FakeReceiver:
-    def __init__(self) -> None:
+    def __init__(self, *, stream_error: BaseException | None = None) -> None:
         import asyncio
 
         self.sources: list[str] = []
         self.started = asyncio.Event()
         self.release = asyncio.Event()
         self.closed = False
+        self.stream_error = stream_error
         self.stream = _FakeStream(self)
 
     def close(self) -> list[object]:
@@ -208,6 +216,38 @@ async def test_direct_sender_streams_exact_url_with_explicit_raop_service(
     assert service.protocol is fake.Protocol.RAOP
     assert service.properties == {"deviceid": "AA:BB:CC:DD:EE:01", "sr": "44100"}
     assert receiver.sources == ["https://media.example/exact.mp3"]
+    assert receiver.closed is True
+
+
+@pytest.mark.asyncio
+async def test_direct_sender_does_not_swallow_pretransfer_shairport_teardown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    receiver = _FakeReceiver(
+        stream_error=RuntimeError("not connected to remote")
+    )
+    fake = _FakePyatv(receiver)
+    monkeypatch.setattr(airplay, "_load_pyatv", lambda: fake)
+    entry = _entry(
+        {
+            "airplay_targets": {
+                "zone-1": _record(
+                    txt={
+                        "deviceid": "AA:BB:CC:DD:EE:01",
+                        "model": "Shairport Sync",
+                    }
+                )
+            }
+        }
+    )
+
+    with pytest.raises((airplay.AirPlayPlaybackError, RuntimeError)) as exc_info:
+        await airplay.DirectRaopClient(entry).async_play_media(
+            "zone-1", "https://media.example/pretransfer.mp3"
+        )
+
+    if isinstance(exc_info.value, RuntimeError):
+        assert str(exc_info.value) == "not connected to remote"
     assert receiver.closed is True
 
 
@@ -294,3 +334,24 @@ async def test_raop_sender_rejects_unsafe_url_before_loading_pyatv(
 
     with pytest.raises(airplay.AirPlayPlaybackError, match="invalid media URL"):
         await airplay.RaopSender().stream_url(target, "file:///tmp/audio.mp3")
+
+
+@pytest.mark.asyncio
+async def test_raop_sender_rejects_oversized_numeric_hostname_before_loading_pyatv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = airplay.load_airplay_targets({"zone-1": _record()})[0]
+    loaded = False
+
+    def fail_if_loaded() -> object:
+        nonlocal loaded
+        loaded = True
+        raise AssertionError("pyatv must not load for an invalid media URL")
+
+    monkeypatch.setattr(airplay, "_load_pyatv", fail_if_loaded)
+    media_url = "http://" + ("9" * 5000) + "/audio"
+
+    with pytest.raises(airplay.AirPlayPlaybackError, match="invalid media URL"):
+        await airplay.RaopSender().stream_url(target, media_url)
+
+    assert loaded is False

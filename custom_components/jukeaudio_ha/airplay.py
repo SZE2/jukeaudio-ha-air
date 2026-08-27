@@ -197,7 +197,6 @@ _RAOP_TXT_PROPERTIES = frozenset(
 )
 _REMOTE_CLOSE_ERRORS = (ConnectionError, EOFError, OSError)
 _PYATV_NOT_CONNECTED_TO_REMOTE = "not connected to remote"
-_SHAIRPORT_SYNC_MODEL = "Shairport Sync"
 
 
 def _parse_legacy_ipv4(address_text: str) -> ipaddress.IPv4Address | None:
@@ -277,6 +276,7 @@ def validate_media_url(value: object) -> str:
         parsed = URL(value)
         hostname = parsed.host
         _ = parsed.port
+        is_loopback = bool(hostname and _is_loopback_host(hostname))
     except (TypeError, ValueError, UnicodeError):
         raise AirPlayPlaybackError(
             "Direct RAOP playback received an invalid media URL"
@@ -288,7 +288,7 @@ def validate_media_url(value: object) -> str:
         or not hostname
         or parsed.user is not None
         or parsed.password is not None
-        or _is_loopback_host(hostname)
+        or is_loopback
     ):
         raise AirPlayPlaybackError("Direct RAOP playback received an invalid media URL")
     return value
@@ -360,18 +360,6 @@ async def _await_close_tasks(receiver: Any) -> tuple[BaseException, ...]:
     return tuple(result for result in results if isinstance(result, BaseException))
 
 
-def _is_shairport_post_transfer_teardown(
-    target: AirPlayTarget,
-    error: BaseException,
-) -> bool:
-    """Recognize only the observed pyatv/Shairport post-transfer teardown."""
-    return (
-        type(error) is RuntimeError
-        and str(error) == _PYATV_NOT_CONNECTED_TO_REMOTE
-        and target.txt.get("model") == _SHAIRPORT_SYNC_MODEL
-    )
-
-
 class RaopSender:
     """Send one URL through pyatv's legacy RAOP stream interface."""
 
@@ -401,19 +389,20 @@ class RaopSender:
 
         try:
             await _maybe_await(receiver.stream.stream_file(exact_media_url))
-        except BaseException as stream_error:
-            if not _is_shairport_post_transfer_teardown(target, stream_error):
-                try:
-                    await _await_close_tasks(receiver)
-                except BaseException:
-                    pass
-                raise
+        except BaseException:
+            try:
+                await _await_close_tasks(receiver)
+            except BaseException:
+                pass
+            raise
+        transfer_completed = True
         close_errors = await _await_close_tasks(receiver)
         for close_error in close_errors:
             if not (
                 isinstance(close_error, _REMOTE_CLOSE_ERRORS)
                 or (
-                    type(close_error) is RuntimeError
+                    transfer_completed
+                    and type(close_error) is RuntimeError
                     and str(close_error) == _PYATV_NOT_CONNECTED_TO_REMOTE
                 )
             ):
