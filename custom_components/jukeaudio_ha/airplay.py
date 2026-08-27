@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import ipaddress
+import json
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from importlib import import_module
@@ -300,6 +301,11 @@ def load_raop_config(config_entry: object) -> RaopConfig | None:
     if not isinstance(options, Mapping):
         return None
     target_mapping = options.get("airplay_targets")
+    if isinstance(target_mapping, str):
+        try:
+            target_mapping = json.loads(target_mapping)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
     if not isinstance(target_mapping, Mapping):
         return None
     try:

@@ -319,6 +319,14 @@ async def test_options_flow_preserves_unrelated_options_and_discards_legacy_help
     }
 
 
+def test_json_serialized_options_mapping_enables_exact_raop_zone() -> None:
+    """HA option storage may return the Options-flow JSON field as text."""
+    entry = _entry({"airplay_targets": json.dumps({"zone-1": _record()})})
+
+    assert airplay.has_raop_target(entry, "zone-1") is True
+    assert airplay.load_raop_config(entry).target_for_zone("zone-1") is not None
+
+
 @pytest.mark.asyncio
 async def test_raop_sender_rejects_unsafe_url_before_loading_pyatv(
     monkeypatch: pytest.MonkeyPatch,
