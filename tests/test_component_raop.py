@@ -74,13 +74,11 @@ def test_component_translation_surface_has_no_legacy_helper_options() -> None:
         assert "RAOP helper" not in text
 
 
-def test_legacy_helper_sources_are_not_component_dependencies() -> None:
-    """Retired helper sources are not imported by the active component."""
+def test_separate_helper_runtime_is_not_shipped() -> None:
+    """The HACS deliverable contains no separate helper runtime."""
     component_root = REPOSITORY_ROOT / "custom_components/jukeaudio_ha"
-    for source in component_root.glob("*.py"):
-        if source.name == "airplay_helper.py":
-            continue
-        assert "airplay_helper" not in source.read_text()
+    assert not (REPOSITORY_ROOT / "airplay_helper").exists()
+    assert not (component_root / "airplay_helper.py").exists()
 
 
 @pytest.mark.parametrize(
