@@ -12,6 +12,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, LOGGER
+from .frontend import async_register_frontend
 from .hub import JukeAudioHub
 from .services import async_setup_services, async_unload_services
 from jukeaudio.exceptions import AuthenticationException, UnexpectedException
@@ -46,6 +47,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {"hub": hub, "coordinator": coordinator}
 
     await coordinator.async_config_entry_first_refresh()
+    async_register_frontend(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await async_setup_services(hass)
 

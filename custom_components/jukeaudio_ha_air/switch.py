@@ -105,6 +105,14 @@ class InputEnabledSwitch(CoordinatorEntity, SwitchEntity):
         """Return Juke's current general-input enablement state."""
         return bool(self._current_input_info().get("enabled", True))
 
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Expose immutable input identity for the bundled control panel."""
+        return {
+            "juke_entity_role": "input_enabled",
+            "juke_input_id": self._input_id,
+        }
+
     async def async_turn_on(self) -> None:
         """Enable the general input."""
         await self._hub.set_input_enabled(self._input_id, True)
@@ -165,6 +173,15 @@ class InputZoneSwitch(CoordinatorEntity, SwitchEntity):
         """Return whether the cached input mapping includes this zone."""
         input_info = self._current_input_info()
         return self._zone_id in _zone_ids(input_info.get("zones", ()))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Expose immutable route identity for the bundled control panel."""
+        return {
+            "juke_entity_role": "input_route",
+            "juke_input_id": self._input_id,
+            "juke_zone_id": self._zone_id,
+        }
 
     async def async_turn_on(self) -> None:
         """Add this zone to the input without replacing other mappings."""

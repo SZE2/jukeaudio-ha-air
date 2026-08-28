@@ -105,6 +105,29 @@ async def test_setup_exposes_general_input_enable_switches_separate_from_route_m
 
 
 @pytest.mark.asyncio
+async def test_switches_expose_stable_dashboard_control_metadata():
+    """The bundled panel can identify enable and route controls without names."""
+    entities = []
+    hub = _FakeHub()
+    entry = SimpleNamespace(entry_id="entry-1")
+
+    await async_setup_entry(_make_hass(hub), entry, entities.extend)
+
+    enabled = next(entity for entity in entities if entity.unique_id == "input_enable_input-0")
+    route = next(entity for entity in entities if entity.unique_id == "route_input-0_zone-0")
+
+    assert enabled.extra_state_attributes == {
+        "juke_entity_role": "input_enabled",
+        "juke_input_id": "input-0",
+    }
+    assert route.extra_state_attributes == {
+        "juke_entity_role": "input_route",
+        "juke_input_id": "input-0",
+        "juke_zone_id": "zone-0",
+    }
+
+
+@pytest.mark.asyncio
 async def test_group_only_general_input_gets_an_enable_switch_without_a_zone_owner():
     """A shared input must not depend on an arbitrary zone device for setup."""
     hub = _FakeHub()

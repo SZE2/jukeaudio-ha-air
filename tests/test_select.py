@@ -78,6 +78,22 @@ async def test_group_only_general_input_still_gets_a_type_select():
     assert entities[0].device_info is None
 
 
+def test_type_select_exposes_stable_dashboard_control_metadata():
+    """The bundled panel can identify type selectors without parsing names."""
+    hub = _FakeHub()
+    selector = InputTypeSelect(
+        hub,
+        hub.jukes["amp-1"],
+        SimpleNamespace(),
+        "input-0",
+    )
+
+    assert selector.extra_state_attributes == {
+        "juke_entity_role": "input_type",
+        "juke_input_id": "input-0",
+    }
+
+
 @pytest.mark.asyncio
 async def test_selecting_the_current_input_type_is_a_noop():
     """The UI never sends Juke a redundant type write that can return HTTP 400."""

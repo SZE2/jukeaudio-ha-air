@@ -203,6 +203,21 @@ def test_zone_without_an_active_input_has_no_source_value():
     assert zone.source is None
 
 
+def test_zone_exposes_its_immutable_id_for_dashboard_route_controls():
+    """The bundled panel can match route controls to their physical zone."""
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "active_input": None,
+        }
+    )
+
+    assert zone.extra_state_attributes["juke_zone_id"] == ZONE_ID
+
+
 @pytest.mark.asyncio
 async def test_zone_power_controls_delegate_to_the_juke_enable_operation():
     """Zone power is an enabled-state control, not inferred from playback."""

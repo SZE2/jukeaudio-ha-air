@@ -90,6 +90,14 @@ class InputTypeSelect(CoordinatorEntity, SelectEntity):
         return input_type if isinstance(input_type, str) else None
 
     @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Expose immutable input identity for the bundled control panel."""
+        return {
+            "juke_entity_role": "input_type",
+            "juke_input_id": self._input_id,
+        }
+
+    @property
     def options(self) -> list[str]:
         """Return only the input types Juke exposes for this exact input."""
         input_info = self._current_input_info()

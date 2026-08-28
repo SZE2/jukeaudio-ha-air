@@ -60,6 +60,34 @@ routed to that zone and streaming. For an automation, enable the matching
 input-to-zone route first; an inactive or unrouted source is deliberately
 rejected rather than forced onto the zone.
 
+## Bundled Juke control panel
+
+After the integration's first config entry loads, it automatically exposes a
+sidebar panel at **Juke Audio** (`/juke-audio-control`). The panel and its
+frontend asset ship inside this HACS integration; no separate custom-card
+repository or Lovelace resource registration is required.
+
+The panel discovers Juke entities from their integration attributes and shows:
+
+- every physical zone with its selected source, power control, and all
+  Juke-routed source candidates;
+- a pulse on a candidate only when Juke reports it as `streaming`;
+- a selectable candidate only when it is enabled and Juke reports it as
+  streaming; and
+- general-input enable, type, and per-zone route controls separately from
+  audio playback.
+
+Selecting a source always calls Juke's active-input operation only. Route
+changes remain explicit input-to-zone controls, so an automation must follow
+the safe order: **add route → wait for refresh → select a Juke-selectable
+streaming source → perform the separately configured transport action →
+restore/remove routes as desired**.
+
+The bundled `custom:juke-zone-card` is also registered automatically for an
+owner-created Lovelace dashboard. The card uses the same Juke-reported
+availability rules as the panel; it never makes a non-streaming or disabled
+source clickable.
+
 > [!CAUTION]
 > Juke remains the source of truth for zone selection and playback state. Some
 > Juke firmware versions can retain a DLNA input's `streaming` indication after
