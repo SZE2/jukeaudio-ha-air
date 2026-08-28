@@ -45,3 +45,16 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
         config={"domain": DOMAIN},
     )
     domain_data[_DATA_FRONTEND_REGISTERED] = True
+
+
+async def async_unregister_frontend(hass: HomeAssistant) -> None:
+    """Remove the Juke sidebar panel after the final entry unloads."""
+    domain_data = hass.data.get(DOMAIN)
+    if not isinstance(domain_data, dict) or not domain_data.pop(
+        _DATA_FRONTEND_REGISTERED, False
+    ):
+        return
+
+    ha_frontend.async_remove_panel(
+        hass, PANEL_URL_PATH, warn_if_unknown=False
+    )

@@ -12,7 +12,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, LOGGER
-from .frontend import async_register_frontend
+from .frontend import async_register_frontend, async_unregister_frontend
 from .hub import JukeAudioHub
 from .services import async_setup_services, async_unload_services
 from jukeaudio.exceptions import AuthenticationException, UnexpectedException
@@ -69,6 +69,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             for entry_data in domain_data.values()
         ):
             await async_unload_services(hass)
+            await async_unregister_frontend(hass)
 
     return unload_ok
 

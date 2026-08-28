@@ -344,6 +344,27 @@ async def test_entry_unload_removes_services_only_after_last_hub(hass_and_hub):
 
 
 @pytest.mark.asyncio
+async def test_final_entry_unload_unregisters_the_juke_sidebar_panel(
+    hass_and_hub, monkeypatch
+):
+    """The frontend panel cannot survive after its final integration entry unloads."""
+    hass, _ = hass_and_hub
+    unregistrations = []
+
+    async def _unregister_frontend(received_hass):
+        unregistrations.append(received_hass)
+
+    monkeypatch.setattr(
+        "custom_components.jukeaudio_ha_air.async_unregister_frontend",
+        _unregister_frontend,
+    )
+
+    assert await async_unload_entry(hass, SimpleNamespace(entry_id="entry-1")) is True
+
+    assert unregistrations == [hass]
+
+
+@pytest.mark.asyncio
 async def test_entry_unload_invalidates_hub_coordinator_before_data_removal():
     """Unloading removes the hub's direct refresh reference before its entry."""
     coordinator = _FakeCoordinator()

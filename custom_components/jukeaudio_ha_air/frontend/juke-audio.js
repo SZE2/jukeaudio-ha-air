@@ -1,5 +1,6 @@
 const JUKE_ZONE_CARD = "juke-zone-card";
 const JUKE_AUDIO_PANEL = "juke-audio-panel";
+const HA_PANEL = `ha-panel-${JUKE_AUDIO_PANEL}`;
 
 const create = (tag, className, text) => {
   const element = document.createElement(tag);
@@ -200,8 +201,8 @@ style.textContent = `
 document.head.append(style);
 
 if (!customElements.get(JUKE_ZONE_CARD)) customElements.define(JUKE_ZONE_CARD, JukeZoneCard);
-if (!customElements.get(JUKE_AUDIO_PANEL)) customElements.define(JUKE_AUDIO_PANEL, JukeAudioPanel);
+if (!customElements.get(HA_PANEL)) customElements.define(HA_PANEL, JukeAudioPanel);
 window.customCards = window.customCards || [];
-if (!window.customCards.some((card) => card.type === `custom:${JUKE_ZONE_CARD}`)) {
-  window.customCards.push({ type: `custom:${JUKE_ZONE_CARD}`, name: "Juke Zone Card", description: "Juke-aware zone input control" });
+if (!window.customCards.some((card) => card.type === JUKE_ZONE_CARD)) {
+  window.customCards.push({ type: JUKE_ZONE_CARD, name: "Juke Zone Card", description: "Juke-aware zone input control" });
 }

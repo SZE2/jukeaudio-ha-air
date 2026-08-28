@@ -101,6 +101,25 @@ async def test_frontend_registration_uses_the_current_async_static_path_api(
     assert panels[0][0] == PANEL_COMPONENT
 
 
+@pytest.mark.asyncio
+async def test_frontend_unregistration_removes_the_sidebar_panel(
+    monkeypatch,
+):
+    """The sidebar panel disappears when the final config entry unloads."""
+    removed_panels = []
+    hass = SimpleNamespace(data={DOMAIN: {"_frontend_registered": True}})
+
+    monkeypatch.setattr(
+        "custom_components.jukeaudio_ha_air.frontend.ha_frontend.async_remove_panel",
+        lambda _hass, url_path, **kwargs: removed_panels.append((url_path, kwargs)),
+    )
+
+    await frontend_module.async_unregister_frontend(hass)
+
+    assert removed_panels == [(PANEL_URL_PATH, {"warn_if_unknown": False})]
+    assert "_frontend_registered" not in hass.data[DOMAIN]
+
+
 def test_bundled_javascript_defines_the_zone_card_and_control_panel():
     """The HACS integration ships the two frontend elements it registers."""
     asset = (
@@ -114,7 +133,10 @@ def test_bundled_javascript_defines_the_zone_card_and_control_panel():
     source = asset.read_text(encoding="utf-8")
 
     assert "customElements.define(JUKE_ZONE_CARD" in source
-    assert "customElements.define(JUKE_AUDIO_PANEL" in source
+    assert "const HA_PANEL = `ha-panel-${JUKE_AUDIO_PANEL}`" in source
+    assert "customElements.define(HA_PANEL" in source
+    assert "type: JUKE_ZONE_CARD" in source
+    assert "type: `custom:${JUKE_ZONE_CARD}`" not in source
     assert "juke_input_options" in source
     assert "media_player" in source
     assert "select_source" in source
