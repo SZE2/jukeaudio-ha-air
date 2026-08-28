@@ -53,6 +53,13 @@ The integration creates media-player entities for amplifier zones and inputs,
 plus diagnostic sensors. Zone entities expose Juke source selection, volume, and
 mute controls. Input entities expose the input types supported by the Juke.
 
+> [!CAUTION]
+> Juke remains the source of truth for zone selection and playback state. Some
+> Juke firmware versions can retain a DLNA input's `streaming` indication after
+> the renderer has become idle. This integration deliberately passes through
+> Juke's reported state instead of trying to reset, mask, or infer around it, so
+> a real DLNA session is never interrupted by Home Assistant.
+
 ## Optional integrated RAOP playback
 
 The integration can stream an already reachable media URL directly through

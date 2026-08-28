@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from custom_components.jukeaudio_ha_air.const import DOMAIN
@@ -213,3 +215,36 @@ def test_get_coordinator_ignores_boolean_service_marker():
     hub._entry_id = "entry-1"
 
     assert hub._get_coordinator() is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_data_preserves_input_streaming_from_inputs_info():
+    """The coordinator cache retains Juke's authoritative streaming indication."""
+    hub = JukeAudioHub(None, "juke.local", "alice", "secret")
+    hub._get_devices_info = AsyncMock(
+        return_value=[
+            {
+                "device_id": "device-1",
+                "config": {"name": "Juke"},
+                "connection": {},
+                "metrics": {},
+                "attributes": {"serial_number": "serial-1", "firmware_version": "1.0"},
+            }
+        ]
+    )
+    hub._get_zones_info = AsyncMock(return_value=[])
+    hub._get_input_info = AsyncMock(
+        return_value=[
+            {
+                "input_id": "device-1-input-0",
+                "input_class": 0,
+                "input_type": "DLNA",
+                "enabled": True,
+                "streaming": True,
+            }
+        ]
+    )
+
+    await hub._fetch_data_v3()
+
+    assert hub.jukes["device-1"].inputs["device-1-input-0"]["streaming"] is True

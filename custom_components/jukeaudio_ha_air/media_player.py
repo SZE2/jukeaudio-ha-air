@@ -8,6 +8,7 @@ from homeassistant.components.media_player import (
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -98,7 +99,9 @@ class Zone(JukeAudioMediaPlayerBase):
         if "warnings" in zone_data and zone_data["warnings"]:
             attributes["warnings"] = zone_data["warnings"]
             attributes["warning_count"] = len(zone_data["warnings"])
-            
+
+        attributes["juke_input_options"] = self._zone_input_options()
+
         return attributes
     
     @property
@@ -194,27 +197,78 @@ class Zone(JukeAudioMediaPlayerBase):
         """Return the cached mute state of the zone."""
         return self._juke.zones[self._zone_id].get("muted")
 
+    @staticmethod
+    def _source_label(input_data) -> str:
+        """Return a stable, user-facing source label for one Juke input."""
+        input_class = input_data.get("input_class")
+        if input_class == 1:
+            return "Spotify"
+        if input_class == 2:
+            return "AirPlay 2"
+        return input_data.get("name") or input_data.get("input_type") or "Unknown"
+
+    def _input_data(self, input_id):
+        """Read one input from the device cache or shared-input cache."""
+        input_data = self._juke.inputs.get(input_id)
+        if input_data is not None:
+            return input_data
+        return getattr(self._juke.hub, "group_inputs", {}).get(input_id)
+
+    def _zone_input_options(self) -> list[dict]:
+        """Describe Juke inputs associated with this zone from cached data."""
+        zone_data = self._juke.zones[self._zone_id]
+        candidates = []
+        for input_id in zone_data.get("input", []):
+            input_data = self._input_data(input_id)
+            if input_data is None:
+                continue
+            candidates.append((input_id, input_data, self._source_label(input_data)))
+
+        label_counts = {}
+        for _, _, label in candidates:
+            label_counts[label] = label_counts.get(label, 0) + 1
+
+        options = []
+        for input_id, input_data, label in candidates:
+            source = label
+            if label_counts[label] > 1:
+                source = f"{label} ({input_id})"
+            streaming = bool(input_data.get("streaming", False))
+            options.append(
+                {
+                    "input_id": input_id,
+                    "source": source,
+                    "input_type": input_data.get("input_type", "Unknown"),
+                    "enabled": bool(input_data.get("enabled", True)),
+                    "streaming": streaming,
+                    "selectable": bool(input_data.get("enabled", True)) and streaming,
+                }
+            )
+        return options
+
     @property
     def source_list(self) -> list[str]:
-        """List of available input sources."""
-        sources = ["None"]
-
-        for i in self._juke.hub.group_inputs:
-                input = self._juke.hub.group_inputs[i]
-                if input.get("enabled", True):
-                    sources.append(input["name"])
-
-        return sources
+        """List inputs Juke currently exposes as selectable for this zone."""
+        return [
+            option["source"]
+            for option in self._zone_input_options()
+            if option["selectable"]
+        ]
 
     @property
     def source(self) -> str:
-        """Currently selected input source"""
-        zone_inputs = self._juke.zones[self._zone_id]["input"]
+        """Return Juke's actual active input for this zone."""
+        active_input_id = self._juke.zones[self._zone_id].get("active_input")
+        if active_input_id is None:
+            return "None"
 
-        for input_id in zone_inputs:
-            if input_id in self._juke.hub.group_inputs:
-                return self._juke.hub.group_inputs[input_id]["name"]
+        for option in self._zone_input_options():
+            if option["input_id"] == active_input_id:
+                return option["source"]
 
+        input_data = self._input_data(active_input_id)
+        if input_data is not None:
+            return self._source_label(input_data)
         return "None"
 
     @property
@@ -235,19 +289,20 @@ class Zone(JukeAudioMediaPlayerBase):
         await self.async_update()
 
     async def async_select_source(self, source: str):
-        """Select input source."""
+        """Select one source Juke currently permits for this zone."""
+        selected = next(
+            (option for option in self._zone_input_options() if option["source"] == source),
+            None,
+        )
+        if selected is None:
+            raise HomeAssistantError(f"Unknown source for this zone: {source}")
+        if not selected["selectable"]:
+            raise HomeAssistantError(
+                f"Source is not currently selectable: {source}"
+            )
 
-        input_id = None
-
-        for i in self._juke.hub.group_inputs:
-            input = self._juke.hub.group_inputs[i]
-            if input["name"] == source:
-                input_id = i
-                break
-
-
-        LOGGER.debug("Setting input to %s for zone %s", input_id, self._zone_id)
-        await self._juke.hub.set_zone_input(self._zone_id, input_id)
+        LOGGER.debug("Selecting input %s for zone %s", selected["input_id"], self._zone_id)
+        await self._juke.hub.set_active_input(self._zone_id, selected["input_id"])
         await self.async_update()
 
 

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from homeassistant.components.media_player import MediaPlayerEntityFeature, MediaPlayerState
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.jukeaudio_ha_air.airplay import dump_airplay_targets, load_airplay_targets
 from custom_components.jukeaudio_ha_air.const import CONF_AIRPLAY_TARGETS
@@ -25,6 +26,9 @@ class _FakeZoneHub:
 
     async def set_zone_volume(self, zone_id, volume):
         self.calls.append(("set_zone_volume", zone_id, volume))
+
+    async def set_active_input(self, zone_id, input_id):
+        self.calls.append(("set_active_input", zone_id, input_id))
 
 
 def _make_zone(zone_data, hub=None, *, zone_id=ZONE_ID, config_entry=None):
@@ -226,3 +230,203 @@ def test_zone_state_prioritizes_disabled_over_playing_and_ignores_mute():
 
     assert disabled_zone.state is MediaPlayerState.OFF
     assert muted_zone.state is MediaPlayerState.PLAYING
+
+
+def test_zone_source_uses_juke_active_input_and_lists_only_streaming_choices():
+    """Zone selection follows Juke's active and streaming input model."""
+    hub = _FakeZoneHub()
+    inputs = {
+        "input-dlna": {
+            "input_id": "input-dlna",
+            "name": "Juke-DLNA2",
+            "input_class": 0,
+            "input_type": "DLNA",
+            "enabled": True,
+            "streaming": True,
+        },
+        "input-airplay": {
+            "input_id": "input-airplay",
+            "name": "zone-1",
+            "input_class": 2,
+            "input_type": "Airplay2",
+            "enabled": True,
+            "streaming": False,
+        },
+        "input-spotify": {
+            "input_id": "input-spotify",
+            "name": "zone-1",
+            "input_class": 1,
+            "input_type": "Spotify",
+            "enabled": True,
+            "streaming": False,
+        },
+    }
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "input": ["input-dlna", "input-airplay", "input-spotify"],
+            "active_input": "input-dlna",
+        },
+        hub,
+    )
+    zone._juke.inputs = inputs
+
+    assert zone.source == "Juke-DLNA2"
+    assert zone.source_list == ["Juke-DLNA2"]
+    assert zone.extra_state_attributes["juke_input_options"] == [
+        {
+            "input_id": "input-dlna",
+            "source": "Juke-DLNA2",
+            "input_type": "DLNA",
+            "enabled": True,
+            "streaming": True,
+            "selectable": True,
+        },
+        {
+            "input_id": "input-airplay",
+            "source": "AirPlay 2",
+            "input_type": "Airplay2",
+            "enabled": True,
+            "streaming": False,
+            "selectable": False,
+        },
+        {
+            "input_id": "input-spotify",
+            "source": "Spotify",
+            "input_type": "Spotify",
+            "enabled": True,
+            "streaming": False,
+            "selectable": False,
+        },
+    ]
+
+
+def test_zone_uses_cached_shared_input_when_not_owned_by_its_device():
+    """A zone can select a general input cached at the hub level."""
+    hub = _FakeZoneHub()
+    hub.group_inputs = {
+        "input-dlna": {
+            "input_id": "input-dlna",
+            "name": "Juke-DLNA2",
+            "input_class": 0,
+            "input_type": "DLNA",
+            "enabled": True,
+            "streaming": True,
+        }
+    }
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "input": ["input-dlna"],
+            "active_input": "input-dlna",
+        },
+        hub,
+    )
+
+    assert zone.source == "Juke-DLNA2"
+    assert zone.source_list == ["Juke-DLNA2"]
+    assert zone.extra_state_attributes["juke_input_options"][0]["input_id"] == "input-dlna"
+
+
+def test_zone_does_not_offer_disabled_streaming_input():
+    """A mapped input stays unavailable when Juke has disabled it."""
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "input": ["input-dlna"],
+            "active_input": None,
+        }
+    )
+    zone._juke.inputs = {
+        "input-dlna": {
+            "input_id": "input-dlna",
+            "name": "Juke-DLNA2",
+            "input_class": 0,
+            "input_type": "DLNA",
+            "enabled": False,
+            "streaming": True,
+        }
+    }
+
+    assert zone.source_list == []
+    assert zone.extra_state_attributes["juke_input_options"][0] == {
+        "input_id": "input-dlna",
+        "source": "Juke-DLNA2",
+        "input_type": "DLNA",
+        "enabled": False,
+        "streaming": True,
+        "selectable": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_zone_source_selection_sets_active_input_not_input_assignment():
+    """Selecting a listed source changes only Juke's active input."""
+    hub = _FakeZoneHub()
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "input": ["input-dlna"],
+            "active_input": "input-dlna",
+        },
+        hub,
+    )
+    zone._juke.inputs = {
+        "input-dlna": {
+            "input_id": "input-dlna",
+            "name": "Juke-DLNA2",
+            "input_class": 0,
+            "input_type": "DLNA",
+            "enabled": True,
+            "streaming": True,
+        }
+    }
+    zone.async_update = AsyncMock()
+
+    await zone.async_select_source("Juke-DLNA2")
+
+    assert hub.calls == [("set_active_input", ZONE_ID, "input-dlna")]
+
+
+@pytest.mark.asyncio
+async def test_zone_rejects_inactive_source_selection():
+    """The integration does not request a source Juke marks unavailable."""
+    hub = _FakeZoneHub()
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "input": ["input-airplay"],
+            "active_input": None,
+        },
+        hub,
+    )
+    zone._juke.inputs = {
+        "input-airplay": {
+            "input_id": "input-airplay",
+            "name": "zone-1",
+            "input_class": 2,
+            "input_type": "Airplay2",
+            "enabled": True,
+            "streaming": False,
+        }
+    }
+
+    with pytest.raises(HomeAssistantError, match="not currently selectable"):
+        await zone.async_select_source("AirPlay 2")
+
+    assert hub.calls == []

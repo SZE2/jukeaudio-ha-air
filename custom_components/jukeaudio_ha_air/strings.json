@@ -2,7 +2,8 @@
   "config": {
     "step": {
       "user": {
-        "data": {
+          "description": "Juke remains the authority for zone source and playback state. Some Juke firmware can retain a DLNA input's streaming indication after playback ends. This integration passes through Juke's reported state and does not reset or mask DLNA automatically.",
+          "data": {
           "host": "[%key:common::config_flow::data::host%]",
           "username": "[%key:common::config_flow::data::username%]",
           "password": "[%key:common::config_flow::data::password%]",
