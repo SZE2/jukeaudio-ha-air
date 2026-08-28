@@ -49,9 +49,16 @@ You can install this repository manually or through HACS. In Home Assistant:
   Settings.
 - **Scan interval:** How often Home Assistant fetches values from the amplifier.
 
-The integration creates media-player entities for amplifier zones and inputs,
-plus diagnostic sensors. Zone entities expose Juke source selection, volume, and
-mute controls. Input entities expose the input types supported by the Juke.
+The integration creates media-player entities only for physical amplifier zones,
+plus diagnostic sensors. Zone entities expose Juke source selection, power,
+volume, and mute controls. General inputs are configuration/routing controls:
+an enable switch, an input-type select, and additive input-to-zone route switches.
+They deliberately are not playback targets for TTS or `media_player.play_media`.
+
+Zone source selection accepts only inputs that Juke currently reports as both
+routed to that zone and streaming. For an automation, enable the matching
+input-to-zone route first; an inactive or unrouted source is deliberately
+rejected rather than forced onto the zone.
 
 > [!CAUTION]
 > Juke remains the source of truth for zone selection and playback state. Some

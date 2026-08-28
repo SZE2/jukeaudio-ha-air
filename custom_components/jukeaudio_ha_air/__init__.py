@@ -16,7 +16,12 @@ from .hub import JukeAudioHub
 from .services import async_setup_services, async_unload_services
 from jukeaudio.exceptions import AuthenticationException, UnexpectedException
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.MEDIA_PLAYER, Platform.SWITCH]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.MEDIA_PLAYER,
+    Platform.SELECT,
+    Platform.SWITCH,
+]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

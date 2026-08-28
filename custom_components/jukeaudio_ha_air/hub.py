@@ -329,9 +329,11 @@ class JukeAudioHub:
     
     async def set_input_type(self, input_id: str, type: str):
         """Set input type"""
-        return await self.client.set_input_type(
+        result = await self.client.set_input_type(
             self._ip_address, self._username, self._password, input_id, type
         )
+        await self._refresh_after_write()
+        return result
 
     async def set_input_volume(self, input_id: str, volume: int):
         """Set the volume for a specific input (0-100)."""
@@ -341,9 +343,11 @@ class JukeAudioHub:
 
     async def set_input_enabled(self, input_id: str, enabled: bool):
         """Enable or disable a specific input."""
-        return await self.client.enable_input(
+        result = await self.client.enable_input(
             self._ip_address, self._username, self._password, input_id, enabled
-        )   
+        )
+        await self._refresh_after_write()
+        return result
 
     async def fetch_data(self):
         if self.client is None:

@@ -8,7 +8,11 @@ import pytest
 from homeassistant.components.switch import SwitchEntity
 
 from custom_components.jukeaudio_ha_air.const import DOMAIN
-from custom_components.jukeaudio_ha_air.switch import async_setup_entry
+from custom_components.jukeaudio_ha_air.switch import (
+    InputEnabledSwitch,
+    InputZoneSwitch,
+    async_setup_entry,
+)
 
 
 class _FakeHub:
@@ -73,8 +77,50 @@ async def test_setup_creates_one_switch_for_each_general_input_and_zone_pair():
 
     await async_setup_entry(_make_hass(hub), entry, entities.extend)
 
-    assert len(entities) == 24
+    assert len([entity for entity in entities if isinstance(entity, InputZoneSwitch)]) == 24
+    assert len(entities) == 28
     assert all(isinstance(entity, SwitchEntity) for entity in entities)
+
+
+@pytest.mark.asyncio
+async def test_setup_exposes_general_input_enable_switches_separate_from_route_matrix():
+    """General inputs expose their Juke-app enable toggles without media playback."""
+    entities = []
+    hub = _FakeHub()
+    entry = SimpleNamespace(entry_id="entry-1")
+
+    await async_setup_entry(_make_hass(hub), entry, entities.extend)
+
+    input_switches = [
+        entity for entity in entities if isinstance(entity, InputEnabledSwitch)
+    ]
+    assert len(input_switches) == 4
+    assert {entity.unique_id for entity in input_switches} == {
+        "input_enable_input-0",
+        "input_enable_input-1",
+        "input_enable_input-2",
+        "input_enable_input-3",
+    }
+    assert len(entities) == 28
+
+
+@pytest.mark.asyncio
+async def test_group_only_general_input_gets_an_enable_switch_without_a_zone_owner():
+    """A shared input must not depend on an arbitrary zone device for setup."""
+    hub = _FakeHub()
+    hub.jukes = {}
+    entry = SimpleNamespace(entry_id="entry-1")
+    entities = []
+
+    await async_setup_entry(_make_hass(hub), entry, entities.extend)
+
+    assert [entity.unique_id for entity in entities] == [
+        "input_enable_input-0",
+        "input_enable_input-1",
+        "input_enable_input-2",
+        "input_enable_input-3",
+    ]
+    assert all(entity.device_info is None for entity in entities)
 
 
 @pytest.mark.asyncio
@@ -118,7 +164,8 @@ async def test_switches_exclude_non_general_and_native_zone_inputs():
 
     await async_setup_entry(_make_hass(hub), entry, entities.extend)
 
-    assert len(entities) == 24
+    assert len([entity for entity in entities if isinstance(entity, InputZoneSwitch)]) == 24
+    assert len(entities) == 28
     assert all("native-airplay" not in entity.unique_id for entity in entities)
     assert all("native-spotify" not in entity.unique_id for entity in entities)
 
@@ -197,4 +244,9 @@ def test_switch_platform_is_registered_without_removing_existing_platforms():
 
     from custom_components.jukeaudio_ha_air import PLATFORMS
 
-    assert PLATFORMS == [Platform.SENSOR, Platform.MEDIA_PLAYER, Platform.SWITCH]
+    assert PLATFORMS == [
+        Platform.SENSOR,
+        Platform.MEDIA_PLAYER,
+        Platform.SELECT,
+        Platform.SWITCH,
+    ]

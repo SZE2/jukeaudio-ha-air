@@ -10,8 +10,8 @@ from homeassistant.components.media_player import MediaPlayerEntityFeature, Medi
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.jukeaudio_ha_air.airplay import dump_airplay_targets, load_airplay_targets
-from custom_components.jukeaudio_ha_air.const import CONF_AIRPLAY_TARGETS
-from custom_components.jukeaudio_ha_air.media_player import Zone
+from custom_components.jukeaudio_ha_air.const import CONF_AIRPLAY_TARGETS, DOMAIN
+from custom_components.jukeaudio_ha_air.media_player import Zone, async_setup_entry
 
 
 ZONE_ID = "zone-1"
@@ -31,6 +31,9 @@ class _FakeZoneHub:
     async def set_active_input(self, zone_id, input_id):
         self.calls.append(("set_active_input", zone_id, input_id))
 
+    async def set_zone_enabled(self, zone_id, enabled):
+        self.calls.append(("set_zone_enabled", zone_id, enabled))
+
 
 class _RefreshCoordinator:
     def __init__(self):
@@ -46,14 +49,40 @@ class _RefreshingZoneHub(_FakeZoneHub):
         await self.coordinator.async_request_refresh()
 
 
-def _make_zone(zone_data, hub=None, *, zone_id=ZONE_ID, config_entry=None, coordinator=None):
+def _make_zone(
+    zone_data, hub=None, *, zone_id=ZONE_ID, config_entry=None, coordinator=None, inputs=None
+):
     """Build a zone entity around the coordinator cache shape."""
     juke = SimpleNamespace(
         zones={zone_id: zone_data},
-        inputs={},
+        inputs=inputs or {},
         hub=hub or SimpleNamespace(),
     )
     return Zone(juke, coordinator or SimpleNamespace(), config_entry, zone_id)
+
+
+def test_idle_active_input_has_no_playing_media_title():
+    """An active but idle input must not be described as playing media."""
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "active_input": "input-1",
+        },
+        inputs={
+            "input-1": {
+                "input_id": "input-1",
+                "input_class": 0,
+                "name": "Juke Bluetooth",
+                "streaming": False,
+            }
+        },
+    )
+
+    assert zone.state is MediaPlayerState.ON
+    assert zone.media_title is None
 
 
 def _airplay_record(*, zone_id, device_id, player_uuid, protocol_mode):
@@ -67,6 +96,40 @@ def _airplay_record(*, zone_id, device_id, player_uuid, protocol_mode):
         "txt": {"deviceid": device_id},
         "protocol_mode": protocol_mode,
     }
+
+
+@pytest.mark.asyncio
+async def test_media_player_platform_creates_only_physical_zones():
+    """General inputs are configuration/routing controls, never HA media players."""
+    juke = SimpleNamespace(
+        zones={
+            "zone-1": {
+                "name": "Living Room",
+                "volume": 42,
+                "muted": False,
+                "enabled": True,
+                "active_input": None,
+            }
+        },
+        inputs={
+            "input-1": {
+                "input_id": "input-1",
+                "input_class": 0,
+                "name": "Juke Bluetooth",
+                "input_type": "Airplay2",
+            }
+        },
+    )
+    hub = SimpleNamespace(jukes={"amp-1": juke})
+    hass = SimpleNamespace(
+        data={DOMAIN: {"entry-1": {"hub": hub, "coordinator": SimpleNamespace()}}}
+    )
+    entities = []
+
+    await async_setup_entry(hass, SimpleNamespace(entry_id="entry-1"), entities.extend)
+
+    assert len(entities) == 1
+    assert isinstance(entities[0], Zone)
 
 
 @pytest.mark.parametrize("muted", [True, False])
@@ -123,6 +186,48 @@ def test_zone_supported_features_include_volume_mute():
     )
 
     assert zone.supported_features & MediaPlayerEntityFeature.VOLUME_MUTE
+
+
+def test_zone_without_an_active_input_has_no_source_value():
+    """An inactive zone does not invent a literal source named ``None``."""
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "active_input": None,
+        }
+    )
+
+    assert zone.source is None
+
+
+@pytest.mark.asyncio
+async def test_zone_power_controls_delegate_to_the_juke_enable_operation():
+    """Zone power is an enabled-state control, not inferred from playback."""
+    hub = _FakeZoneHub()
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "active_input": None,
+        },
+        hub,
+    )
+
+    assert zone.supported_features & MediaPlayerEntityFeature.TURN_ON
+    assert zone.supported_features & MediaPlayerEntityFeature.TURN_OFF
+
+    await zone.async_turn_off()
+    await zone.async_turn_on()
+
+    assert hub.calls == [
+        ("set_zone_enabled", ZONE_ID, False),
+        ("set_zone_enabled", ZONE_ID, True),
+    ]
 
 
 def test_zone_advertises_play_media_only_for_exact_raop_mapping():
@@ -242,9 +347,43 @@ def test_zone_state_prioritizes_disabled_over_playing_and_ignores_mute():
             "active_input": "input-1",
         }
     )
+    muted_zone._juke.inputs = {
+        "input-1": {
+            "input_id": "input-1",
+            "input_class": 1,
+            "input_type": "Spotify",
+            "enabled": True,
+            "streaming": True,
+        }
+    }
 
     assert disabled_zone.state is MediaPlayerState.OFF
     assert muted_zone.state is MediaPlayerState.PLAYING
+
+
+def test_zone_with_an_active_but_non_streaming_input_is_on_not_playing():
+    """Juke source selection alone is not proof of active media playback."""
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "input": ["input-airplay"],
+            "active_input": "input-airplay",
+        }
+    )
+    zone._juke.inputs = {
+        "input-airplay": {
+            "input_id": "input-airplay",
+            "input_class": 2,
+            "input_type": "Airplay2",
+            "enabled": True,
+            "streaming": False,
+        }
+    }
+
+    assert zone.state is MediaPlayerState.ON
 
 
 def test_zone_source_uses_juke_active_input_and_lists_only_streaming_choices():
@@ -476,5 +615,49 @@ async def test_zone_rejects_inactive_source_selection():
 
     with pytest.raises(HomeAssistantError, match="not currently selectable"):
         await zone.async_select_source("AirPlay 2")
+
+    assert hub.calls == []
+
+
+@pytest.mark.asyncio
+async def test_zone_explains_when_a_known_general_input_is_not_routed():
+    """Automation failures identify a missing route instead of a vague unknown source."""
+    hub = _FakeZoneHub()
+    hub.group_inputs = {
+        "input-dlna": {
+            "input_id": "input-dlna",
+            "name": "Juke-DLNA2",
+            "input_class": 0,
+            "input_type": "DLNA",
+            "enabled": True,
+            "streaming": True,
+        }
+    }
+    zone = _make_zone(
+        {
+            "name": "Greatroom",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "input": ["input-airplay"],
+            "active_input": None,
+        },
+        hub,
+    )
+    zone._juke.inputs = {
+        "input-airplay": {
+            "input_id": "input-airplay",
+            "input_class": 2,
+            "input_type": "Airplay2",
+            "enabled": True,
+            "streaming": False,
+        }
+    }
+
+    with pytest.raises(
+        HomeAssistantError,
+        match="not routed to zone Greatroom; enable its route before selecting it",
+    ):
+        await zone.async_select_source("Juke-DLNA2")
 
     assert hub.calls == []

@@ -37,13 +37,6 @@ async def async_setup_entry(
                 Zone(juke, coordinator, config_entry, zone_id)
             )
 
-        # Add input entities    
-        for input_id in juke.inputs:
-            input = juke.inputs[input_id]
-            if input["input_class"] == 0:
-                entities.append(
-                    InputMediaPlayer(juke, coordinator, config_entry, input_id)
-                )
     if entities:
         async_add_entities(entities)
 
@@ -114,37 +107,30 @@ class Zone(JukeAudioMediaPlayerBase):
         if not zone_data.get("enabled", True):
             return MediaPlayerState.OFF
 
-        # If zone has an active_input that's not None, it's playing
-        if "active_input" in zone_data and zone_data["active_input"] is not None:
+        active_input_id = zone_data.get("active_input")
+        active_input = self._input_data(active_input_id) if active_input_id else None
+        if active_input is not None and active_input.get("streaming", False):
             return MediaPlayerState.PLAYING
 
-        # No active input but zone is on
+        # A selected but idle source is not playing media.
         return MediaPlayerState.ON
         
     @property
     def media_title(self) -> str | None:
         """Title of current playing media."""
         zone_data = self._juke.zones[self._zone_id]
-        
-        # Only provide title if we're playing
-        if "active_input" in zone_data and zone_data["active_input"] is not None:
-            active_input_id = zone_data["active_input"]
-            
-            # Get the name of the active input
-            if active_input_id in self._juke.inputs:
-                input_data = self._juke.inputs[active_input_id]
-                
-                # Only use input name if input class is 0
-                if input_data.get("input_class") == 0:
-                    input_name = input_data.get("name")
-                    if input_name:
-                        return f"Playing from {input_name}"
-                
-                # If we can't use the name, fall back to type
-                input_type = input_data.get("input_type", "Unknown")
-                return f"Playing from {input_type}"
-                
-        return None
+        active_input_id = zone_data.get("active_input")
+        active_input = self._input_data(active_input_id) if active_input_id else None
+        if active_input is None or not active_input.get("streaming", False):
+            return None
+
+        if active_input.get("input_class") == 0:
+            input_name = active_input.get("name")
+            if input_name:
+                return f"Playing from {input_name}"
+
+        input_type = active_input.get("input_type", "Unknown")
+        return f"Playing from {input_type}"
     
     @property
     def media_artist(self) -> str | None:
@@ -176,6 +162,8 @@ class Zone(JukeAudioMediaPlayerBase):
             MediaPlayerEntityFeature.SELECT_SOURCE
             | MediaPlayerEntityFeature.VOLUME_SET
             | MediaPlayerEntityFeature.VOLUME_MUTE
+            | MediaPlayerEntityFeature.TURN_ON
+            | MediaPlayerEntityFeature.TURN_OFF
         )
         if has_raop_target(self._config_entry, self._zone_id):
             features |= MediaPlayerEntityFeature.PLAY_MEDIA
@@ -213,6 +201,22 @@ class Zone(JukeAudioMediaPlayerBase):
         if input_data is not None:
             return input_data
         return getattr(self._juke.hub, "group_inputs", {}).get(input_id)
+
+    def _known_general_input_ids(self, source: str) -> set[str]:
+        """Return unqualified general inputs with this source label."""
+        candidates = set()
+        input_maps = (
+            self._juke.inputs,
+            getattr(self._juke.hub, "group_inputs", {}),
+        )
+        for input_map in input_maps:
+            for input_id, input_data in input_map.items():
+                if (
+                    input_data.get("input_class") == 0
+                    and self._source_label(input_data) == source
+                ):
+                    candidates.add(input_id)
+        return candidates
 
     def _zone_input_options(self) -> list[dict]:
         """Describe Juke inputs associated with this zone from cached data."""
@@ -256,11 +260,11 @@ class Zone(JukeAudioMediaPlayerBase):
         ]
 
     @property
-    def source(self) -> str:
+    def source(self) -> str | None:
         """Return Juke's actual active input for this zone."""
         active_input_id = self._juke.zones[self._zone_id].get("active_input")
         if active_input_id is None:
-            return "None"
+            return None
 
         for option in self._zone_input_options():
             if option["input_id"] == active_input_id:
@@ -269,7 +273,7 @@ class Zone(JukeAudioMediaPlayerBase):
         input_data = self._input_data(active_input_id)
         if input_data is not None:
             return self._source_label(input_data)
-        return "None"
+        return None
 
     @property
     def media_content_type(self):
@@ -295,6 +299,12 @@ class Zone(JukeAudioMediaPlayerBase):
             None,
         )
         if selected is None:
+            known_general_inputs = self._known_general_input_ids(source)
+            if len(known_general_inputs) == 1:
+                zone_name = self._juke.zones[self._zone_id].get("name", self._zone_id)
+                raise HomeAssistantError(
+                    f"Source is not routed to zone {zone_name}; enable its route before selecting it"
+                )
             raise HomeAssistantError(f"Unknown source for this zone: {source}")
         if not selected["selectable"]:
             raise HomeAssistantError(
@@ -303,6 +313,14 @@ class Zone(JukeAudioMediaPlayerBase):
 
         LOGGER.debug("Selecting input %s for zone %s", selected["input_id"], self._zone_id)
         await self._juke.hub.set_active_input(self._zone_id, selected["input_id"])
+
+    async def async_turn_on(self) -> None:
+        """Enable this physical Juke zone."""
+        await self._juke.hub.set_zone_enabled(self._zone_id, True)
+
+    async def async_turn_off(self) -> None:
+        """Disable this physical Juke zone."""
+        await self._juke.hub.set_zone_enabled(self._zone_id, False)
 
 
 class InputMediaPlayer(JukeAudioMediaPlayerBase):

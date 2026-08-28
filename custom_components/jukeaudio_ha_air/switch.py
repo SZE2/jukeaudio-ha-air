@@ -27,6 +27,7 @@ async def async_setup_entry(
     coordinator = entry_data["coordinator"]
 
     input_infos: dict[str, Mapping[str, Any]] = {}
+    input_owners: dict[str, JukeAudioDevice] = {}
     for input_id, input_info in getattr(hub, "group_inputs", {}).items():
         if input_info.get("input_class") == 0:
             input_infos[input_id] = input_info
@@ -38,8 +39,17 @@ async def async_setup_entry(
         for input_id, input_info in getattr(juke, "inputs", {}).items():
             if input_info.get("input_class") == 0:
                 input_infos.setdefault(input_id, input_info)
+                input_owners.setdefault(input_id, juke)
 
     entities = [
+        InputEnabledSwitch(
+            hub,
+            input_owners.get(input_id),
+            coordinator,
+            input_id,
+        )
+        for input_id in input_infos
+    ] + [
         InputZoneSwitch(
             hub,
             zone_owners[zone_id],
@@ -54,6 +64,61 @@ async def async_setup_entry(
 
     if entities:
         async_add_entities(entities)
+
+
+class InputEnabledSwitch(CoordinatorEntity, SwitchEntity):
+    """A general input's Juke-app enable toggle."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        hub: JukeAudioHub,
+        juke: JukeAudioDevice | None,
+        coordinator,
+        input_id: str,
+    ) -> None:
+        """Initialize an input-enable switch."""
+        super().__init__(coordinator)
+        self._hub = hub
+        self._juke = juke
+        self._input_id = input_id
+
+    @property
+    def unique_id(self) -> str:
+        """Return the stable general-input identity."""
+        return f"input_enable_{self._input_id}"
+
+    @property
+    def name(self) -> str:
+        """Return the Juke-app input enable label."""
+        input_info = self._current_input_info()
+        return f"{input_info.get('name', self._input_id)} Enabled"
+
+    @property
+    def device_info(self) -> DeviceInfo | None:
+        """Return the physical Juke device owning this input."""
+        return self._juke.device_info if self._juke is not None else None
+
+    @property
+    def is_on(self) -> bool:
+        """Return Juke's current general-input enablement state."""
+        return bool(self._current_input_info().get("enabled", True))
+
+    async def async_turn_on(self) -> None:
+        """Enable the general input."""
+        await self._hub.set_input_enabled(self._input_id, True)
+
+    async def async_turn_off(self) -> None:
+        """Disable the general input."""
+        await self._hub.set_input_enabled(self._input_id, False)
+
+    def _current_input_info(self) -> Mapping[str, Any]:
+        """Read the coordinator-backed general-input record."""
+        input_info = getattr(self._hub, "group_inputs", {}).get(self._input_id)
+        if input_info is not None:
+            return input_info
+        return getattr(self._juke, "inputs", {}).get(self._input_id, {})
 
 
 class InputZoneSwitch(CoordinatorEntity, SwitchEntity):

@@ -55,6 +55,12 @@ class _FakeClient:
     async def set_zone_based_input_enabled(self, *args):
         return await self._return("set_zone_based_input_enabled", *args)
 
+    async def set_input_type(self, *args):
+        return await self._return("set_input_type", *args)
+
+    async def enable_input(self, *args):
+        return await self._return("enable_input", *args)
+
 
 @pytest.fixture
 def hub_and_fakes():
@@ -172,6 +178,21 @@ async def test_set_zone_based_input_enabled_delegates_and_refreshes(hub_and_fake
         )
     ]
     assert coordinator.refreshes == 1
+
+
+@pytest.mark.asyncio
+async def test_general_input_configuration_writes_refresh_immediately(hub_and_fakes):
+    """Input type and enable controls update their coordinator-backed UI state."""
+    hub, client, coordinator = hub_and_fakes
+
+    await hub.set_input_type("input-1", "Spotify")
+    await hub.set_input_enabled("input-1", False)
+
+    assert client.calls == [
+        ("set_input_type", ("juke.local", "alice", "secret", "input-1", "Spotify")),
+        ("enable_input", ("juke.local", "alice", "secret", "input-1", False)),
+    ]
+    assert coordinator.refreshes == 2
 
 
 @pytest.mark.asyncio

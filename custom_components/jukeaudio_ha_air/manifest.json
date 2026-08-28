@@ -14,6 +14,6 @@
   "loggers": ["jukeaudio"],
   "requirements": ["jukeaudio==0.0.11", "pyatv==0.18.0"],
   "ssdp": [],
-  "version": "0.1.2",
+  "version": "0.1.4",
   "zeroconf": []
 }
