@@ -303,7 +303,6 @@ class Zone(JukeAudioMediaPlayerBase):
 
         LOGGER.debug("Selecting input %s for zone %s", selected["input_id"], self._zone_id)
         await self._juke.hub.set_active_input(self._zone_id, selected["input_id"])
-        await self.async_update()
 
 
 class InputMediaPlayer(JukeAudioMediaPlayerBase):

@@ -18,8 +18,9 @@ ZONE_ID = "zone-1"
 
 
 class _FakeZoneHub:
-    def __init__(self):
+    def __init__(self, coordinator=None):
         self.calls = []
+        self.coordinator = coordinator
 
     async def set_zone_mute(self, zone_id, muted):
         self.calls.append(("set_zone_mute", zone_id, muted))
@@ -31,14 +32,28 @@ class _FakeZoneHub:
         self.calls.append(("set_active_input", zone_id, input_id))
 
 
-def _make_zone(zone_data, hub=None, *, zone_id=ZONE_ID, config_entry=None):
+class _RefreshCoordinator:
+    def __init__(self):
+        self.refreshes = 0
+
+    async def async_request_refresh(self):
+        self.refreshes += 1
+
+
+class _RefreshingZoneHub(_FakeZoneHub):
+    async def set_active_input(self, zone_id, input_id):
+        await super().set_active_input(zone_id, input_id)
+        await self.coordinator.async_request_refresh()
+
+
+def _make_zone(zone_data, hub=None, *, zone_id=ZONE_ID, config_entry=None, coordinator=None):
     """Build a zone entity around the coordinator cache shape."""
     juke = SimpleNamespace(
         zones={zone_id: zone_data},
         inputs={},
         hub=hub or SimpleNamespace(),
     )
-    return Zone(juke, SimpleNamespace(), config_entry, zone_id)
+    return Zone(juke, coordinator or SimpleNamespace(), config_entry, zone_id)
 
 
 def _airplay_record(*, zone_id, device_id, player_uuid, protocol_mode):
@@ -398,6 +413,39 @@ async def test_zone_source_selection_sets_active_input_not_input_assignment():
     await zone.async_select_source("Juke-DLNA2")
 
     assert hub.calls == [("set_active_input", ZONE_ID, "input-dlna")]
+
+
+@pytest.mark.asyncio
+async def test_zone_source_selection_relies_on_hub_for_the_single_refresh():
+    """Active-input writes must not request a second coordinator refresh."""
+    coordinator = _RefreshCoordinator()
+    hub = _RefreshingZoneHub(coordinator)
+    zone = _make_zone(
+        {
+            "name": "Living Room",
+            "volume": 42,
+            "muted": False,
+            "enabled": True,
+            "input": ["input-dlna"],
+            "active_input": "input-dlna",
+        },
+        hub,
+        coordinator=coordinator,
+    )
+    zone._juke.inputs = {
+        "input-dlna": {
+            "input_id": "input-dlna",
+            "name": "Juke-DLNA2",
+            "input_class": 0,
+            "input_type": "DLNA",
+            "enabled": True,
+            "streaming": True,
+        }
+    }
+
+    await zone.async_select_source("Juke-DLNA2")
+
+    assert coordinator.refreshes == 1
 
 
 @pytest.mark.asyncio
