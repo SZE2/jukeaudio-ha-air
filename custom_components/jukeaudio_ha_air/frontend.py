@@ -9,20 +9,32 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 
+try:
+    from homeassistant.components.http import StaticPathConfig
+except ImportError:  # Home Assistant before the batched static-path API.
+    StaticPathConfig = None
+
 PANEL_COMPONENT = "juke-audio-panel"
 PANEL_URL_PATH = "juke-audio-control"
 STATIC_URL = f"/{DOMAIN}/juke-audio.js"
 _DATA_FRONTEND_REGISTERED = "_frontend_registered"
 
 
-def async_register_frontend(hass: HomeAssistant) -> None:
+async def async_register_frontend(hass: HomeAssistant) -> None:
     """Serve and load the Juke panel once for this Home Assistant runtime."""
     domain_data = hass.data.setdefault(DOMAIN, {})
     if domain_data.get(_DATA_FRONTEND_REGISTERED):
         return
 
     asset = Path(__file__).with_name("frontend") / "juke-audio.js"
-    hass.http.register_static_path(STATIC_URL, str(asset), cache_headers=False)
+    if hasattr(hass.http, "async_register_static_paths"):
+        if StaticPathConfig is None:
+            raise RuntimeError("Home Assistant static-path configuration is unavailable")
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(STATIC_URL, str(asset), cache_headers=False)]
+        )
+    else:
+        hass.http.register_static_path(STATIC_URL, str(asset), cache_headers=False)
     ha_frontend.add_extra_js_url(hass, STATIC_URL)
     ha_frontend.async_register_built_in_panel(
         hass,

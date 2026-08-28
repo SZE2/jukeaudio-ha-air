@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from custom_components.jukeaudio_ha_air.const import DOMAIN
+from custom_components.jukeaudio_ha_air import frontend as frontend_module
 from custom_components.jukeaudio_ha_air.frontend import (
     PANEL_COMPONENT,
     PANEL_URL_PATH,
@@ -22,7 +25,16 @@ class _FakeHttp:
         self.calls.append((url_path, path, cache_headers))
 
 
-def test_frontend_registration_is_idempotent_and_registers_the_bundled_panel(
+class _ModernFakeHttp:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def async_register_static_paths(self, paths) -> None:
+        self.calls.append(paths)
+
+
+@pytest.mark.asyncio
+async def test_frontend_registration_is_idempotent_and_registers_the_bundled_panel(
     monkeypatch,
 ):
     """One integration runtime serves and loads one built-in Juke control panel."""
@@ -39,8 +51,8 @@ def test_frontend_registration_is_idempotent_and_registers_the_bundled_panel(
         lambda _hass, component_name, **kwargs: panels.append((component_name, kwargs)),
     )
 
-    async_register_frontend(hass)
-    async_register_frontend(hass)
+    await async_register_frontend(hass)
+    await async_register_frontend(hass)
 
     assert len(hass.http.calls) == 1
     assert hass.http.calls[0][0] == STATIC_URL
@@ -57,6 +69,36 @@ def test_frontend_registration_is_idempotent_and_registers_the_bundled_panel(
             },
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_frontend_registration_uses_the_current_async_static_path_api(
+    monkeypatch,
+):
+    """Current Home Assistant releases require batched async static paths."""
+    module_urls = []
+    panels = []
+    hass = SimpleNamespace(data={DOMAIN: {}}, http=_ModernFakeHttp())
+
+    monkeypatch.setattr(
+        frontend_module,
+        "StaticPathConfig",
+        lambda url_path, path, cache_headers: (url_path, path, cache_headers),
+    )
+    monkeypatch.setattr(
+        "custom_components.jukeaudio_ha_air.frontend.ha_frontend.add_extra_js_url",
+        lambda _hass, url: module_urls.append(url),
+    )
+    monkeypatch.setattr(
+        "custom_components.jukeaudio_ha_air.frontend.ha_frontend.async_register_built_in_panel",
+        lambda _hass, component_name, **kwargs: panels.append((component_name, kwargs)),
+    )
+
+    await async_register_frontend(hass)
+
+    assert hass.http.calls == [[(STATIC_URL, str(Path(frontend_module.__file__).with_name("frontend") / "juke-audio.js"), False)]]
+    assert module_urls == [STATIC_URL]
+    assert panels[0][0] == PANEL_COMPONENT
 
 
 def test_bundled_javascript_defines_the_zone_card_and_control_panel():
