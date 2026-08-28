@@ -175,12 +175,12 @@ class JukeAudioPanel extends HTMLElement {
 
 const style = document.createElement("style");
 style.textContent = `
-  juke-audio-panel { display:block; padding:16px; max-width:1500px; margin:auto; }
-  juke-audio-panel .lead, .juke-zone-card .status { color:var(--secondary-text-color); }
-  juke-audio-panel .zone-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
-  juke-audio-panel .input-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+  ${HA_PANEL} { display:block; padding:16px; max-width:1500px; margin:auto; }
+  ${HA_PANEL} .lead, .juke-zone-card .status { color:var(--secondary-text-color); }
+  ${HA_PANEL} .zone-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+  ${HA_PANEL} .input-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
   .juke-zone-card { display:block; }
-  .juke-zone-card ha-card, juke-audio-panel .input-card { padding:14px; }
+  .juke-zone-card ha-card, ${HA_PANEL} .input-card { padding:14px; }
   .juke-zone-card .header { display:flex; justify-content:space-between; gap:8px; align-items:center; }
   .juke-zone-card .title { font-size:1.1em; font-weight:600; }
   .juke-zone-card .status { display:flex; justify-content:space-between; gap:8px; font-size:.86em; margin:10px 0; }
@@ -190,11 +190,11 @@ style.textContent = `
   .juke-zone-card .input-option.unavailable { opacity:.55; }
   .juke-zone-card .activity { color:var(--success-color,#43a047); animation:juke-pulse 1.2s ease-in-out infinite; }
   .juke-zone-card .selected-label, .juke-zone-card .reason { font-size:.78em; color:var(--secondary-text-color); }
-  juke-audio-panel button, juke-audio-panel select { font:inherit; padding:7px 9px; border-radius:7px; border:1px solid var(--divider-color); background:var(--card-background-color); color:var(--primary-text-color); cursor:pointer; }
-  juke-audio-panel button:disabled { cursor:not-allowed; }
-  juke-audio-panel .input-card h3 { margin-top:0; }
-  juke-audio-panel .routes { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
-  juke-audio-panel .route.on { border-color:var(--primary-color); background:color-mix(in srgb,var(--primary-color) 12%,var(--card-background-color)); }
+  ${HA_PANEL} button, ${HA_PANEL} select { font:inherit; padding:7px 9px; border-radius:7px; border:1px solid var(--divider-color); background:var(--card-background-color); color:var(--primary-text-color); cursor:pointer; }
+  ${HA_PANEL} button:disabled { cursor:not-allowed; }
+  ${HA_PANEL} .input-card h3 { margin-top:0; }
+  ${HA_PANEL} .routes { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  ${HA_PANEL} .route.on { border-color:var(--primary-color); background:color-mix(in srgb,var(--primary-color) 12%,var(--card-background-color)); }
   .notice { padding:10px; color:var(--secondary-text-color); }
   @keyframes juke-pulse { 50% { opacity:.25; transform:scale(.85); } }
 `;

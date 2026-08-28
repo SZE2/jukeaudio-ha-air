@@ -107,17 +107,62 @@ async def test_frontend_unregistration_removes_the_sidebar_panel(
 ):
     """The sidebar panel disappears when the final config entry unloads."""
     removed_panels = []
-    hass = SimpleNamespace(data={DOMAIN: {"_frontend_registered": True}})
+    hass = SimpleNamespace(
+        data={
+            DOMAIN: {
+                "_frontend_static_registered": True,
+                "_frontend_panel_registered": True,
+            }
+        }
+    )
 
     monkeypatch.setattr(
         "custom_components.jukeaudio_ha_air.frontend.ha_frontend.async_remove_panel",
-        lambda _hass, url_path, **kwargs: removed_panels.append((url_path, kwargs)),
+        lambda _hass, url_path: removed_panels.append(url_path),
     )
 
     await frontend_module.async_unregister_frontend(hass)
 
-    assert removed_panels == [(PANEL_URL_PATH, {"warn_if_unknown": False})]
-    assert "_frontend_registered" not in hass.data[DOMAIN]
+    assert removed_panels == [PANEL_URL_PATH]
+    assert hass.data[DOMAIN] == {"_frontend_static_registered": True}
+
+
+@pytest.mark.asyncio
+async def test_frontend_reload_reuses_the_static_route_and_reregisters_panel(
+    monkeypatch,
+):
+    """An unload/reload keeps the immutable static route but restores the panel."""
+    module_urls = []
+    panels = []
+    removed_panels = []
+    hass = SimpleNamespace(data={DOMAIN: {}}, http=_ModernFakeHttp())
+
+    monkeypatch.setattr(
+        frontend_module,
+        "StaticPathConfig",
+        lambda url_path, path, cache_headers: (url_path, path, cache_headers),
+    )
+    monkeypatch.setattr(
+        "custom_components.jukeaudio_ha_air.frontend.ha_frontend.add_extra_js_url",
+        lambda _hass, url: module_urls.append(url),
+    )
+    monkeypatch.setattr(
+        "custom_components.jukeaudio_ha_air.frontend.ha_frontend.async_register_built_in_panel",
+        lambda _hass, component_name, **kwargs: panels.append((component_name, kwargs)),
+    )
+    monkeypatch.setattr(
+        "custom_components.jukeaudio_ha_air.frontend.ha_frontend.async_remove_panel",
+        lambda _hass, url_path: removed_panels.append(url_path),
+    )
+
+    await async_register_frontend(hass)
+    await frontend_module.async_unregister_frontend(hass)
+    await async_register_frontend(hass)
+
+    assert len(hass.http.calls) == 1
+    assert module_urls == [STATIC_URL]
+    assert [panel[0] for panel in panels] == [PANEL_COMPONENT, PANEL_COMPONENT]
+    assert removed_panels == [PANEL_URL_PATH]
 
 
 def test_bundled_javascript_defines_the_zone_card_and_control_panel():
@@ -137,6 +182,8 @@ def test_bundled_javascript_defines_the_zone_card_and_control_panel():
     assert "customElements.define(HA_PANEL" in source
     assert "type: JUKE_ZONE_CARD" in source
     assert "type: `custom:${JUKE_ZONE_CARD}`" not in source
+    assert "${HA_PANEL} .zone-grid" in source
+    assert "juke-audio-panel .zone-grid" not in source
     assert "juke_input_options" in source
     assert "media_player" in source
     assert "select_source" in source
