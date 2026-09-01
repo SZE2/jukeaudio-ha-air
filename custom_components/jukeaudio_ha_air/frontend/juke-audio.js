@@ -322,9 +322,7 @@ const panelStyle = `
   }
   .input-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .input-name { font-size: 1rem; font-weight: 720; }
-  .state-badge { padding: 5px 8px; border-radius: 999px; color: #9bdbbb; background: rgb(23 58 43 / 90%); font-size: .73rem; font-weight: 700; }
-  .state-badge.disabled { color: #c5a7a7; background: rgb(57 36 38 / 90%); }
-  .config { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0 14px; }
+  .config { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 16px 0 14px; }
   .control-label { display: block; margin-bottom: 6px; color: var(--secondary-text-color, #75838d); font-size: .7rem; font-weight: 720; letter-spacing: .065em; text-transform: uppercase; }
   select, .input-card button {
     font: inherit;
@@ -335,7 +333,6 @@ const panelStyle = `
   }
   select { width: 100%; padding: 9px; }
   select:disabled { cursor: not-allowed; opacity: .55; }
-  .switch-line { display: flex; align-items: center; justify-content: space-between; min-height: 39px; padding: 0 10px; border: 1px solid var(--divider-color, #37424b); border-radius: 9px; color: var(--secondary-text-color, #aeb9c1); background: var(--secondary-background-color, #232a30); font-size: .84rem; }
   .tiny-switch { width: 32px; height: 18px; padding: 2px; border: 0 !important; border-radius: 99px !important; background: var(--disabled-text-color, #49555f) !important; cursor: pointer; }
   .tiny-switch::after { content: ""; display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--primary-background-color, #eaf1f5); transition: transform .16s; }
   .tiny-switch.on { background: var(--primary-color, #4fc3f7) !important; }
@@ -454,7 +451,13 @@ class JukeAudioPanel extends HTMLElement {
       inputTop.append(create("div", "input-name", inputName));
       if (enabled) {
         const enabledState = enabled[1].state === "on";
-        inputTop.append(create("span", `state-badge${enabledState ? "" : " disabled"}`, enabledState ? "Enabled" : "Disabled"));
+        const toggle = create("button", `tiny-switch${enabledState ? " on" : ""}`);
+        toggle.type = "button";
+        toggle.disabled = enabled[1].state === "unavailable";
+        toggle.setAttribute("aria-label", `${enabledState ? "Disable" : "Enable"} ${inputName}`);
+        toggle.setAttribute("aria-pressed", String(enabledState));
+        toggle.addEventListener("click", () => this._hass.callService("homeassistant", enabledState ? "turn_off" : "turn_on", { entity_id: enabled[0] }));
+        inputTop.append(toggle);
       }
       card.append(inputTop);
 
@@ -474,22 +477,6 @@ class JukeAudioPanel extends HTMLElement {
         selector.addEventListener("change", () => this._hass.callService("select", "select_option", { entity_id: type[0], option: selector.value }));
         typeControl.append(selector);
         config.append(typeControl);
-      }
-      if (enabled) {
-        const availability = create("div");
-        availability.append(create("label", "control-label", "Availability"));
-        const switchLine = create("div", "switch-line");
-        const enabledState = enabled[1].state === "on";
-        switchLine.append(create("span", null, enabledState ? "Available" : "Disabled"));
-        const toggle = create("button", `tiny-switch${enabledState ? " on" : ""}`);
-        toggle.type = "button";
-        toggle.disabled = enabled[1].state === "unavailable";
-        toggle.setAttribute("aria-label", `${enabledState ? "Disable" : "Enable"} ${inputName}`);
-        toggle.setAttribute("aria-pressed", String(enabledState));
-        toggle.addEventListener("click", () => this._hass.callService("homeassistant", enabledState ? "turn_off" : "turn_on", { entity_id: enabled[0] }));
-        switchLine.append(toggle);
-        availability.append(switchLine);
-        config.append(availability);
       }
       if (config.childElementCount) card.append(config);
 
