@@ -166,7 +166,7 @@ async def test_frontend_reload_reuses_the_static_route_and_reregisters_panel(
 
 
 def test_bundled_javascript_defines_the_zone_card_and_control_panel():
-    """The HACS integration ships the two frontend elements it registers."""
+    """The bundled elements own their styles inside their component boundaries."""
     asset = (
         Path(__file__).parent.parent
         / "custom_components"
@@ -182,8 +182,49 @@ def test_bundled_javascript_defines_the_zone_card_and_control_panel():
     assert "customElements.define(HA_PANEL" in source
     assert "type: JUKE_ZONE_CARD" in source
     assert "type: `custom:${JUKE_ZONE_CARD}`" not in source
-    assert "${HA_PANEL} .zone-grid" in source
-    assert "juke-audio-panel .zone-grid" not in source
+    assert 'attachShadow({ mode: "open" })' in source
+    assert "document.head" not in source
+    assert ":host" in source
+    assert ".zone-grid" in source
     assert "juke_input_options" in source
     assert "media_player" in source
     assert "select_source" in source
+
+
+def test_frontend_uses_explicit_juke_metadata_instead_of_generated_friendly_names():
+    """Panel labels come from integration metadata, never HA-generated names."""
+    asset = (
+        Path(__file__).parent.parent
+        / "custom_components"
+        / DOMAIN
+        / "frontend"
+        / "juke-audio.js"
+    )
+
+    source = asset.read_text(encoding="utf-8")
+
+    assert "juke_zone_name" in source
+    assert "juke_input_name" in source
+    assert "friendly_name" not in source
+    assert "formatSourceLabel" in source
+    assert "Juke-DLNA2" not in source
+
+
+def test_frontend_only_animates_the_current_streaming_source():
+    """A globally streaming but unselected source stays available, not live."""
+    asset = (
+        Path(__file__).parent.parent
+        / "custom_components"
+        / DOMAIN
+        / "frontend"
+        / "juke-audio.js"
+    )
+
+    source = asset.read_text(encoding="utf-8")
+
+    assert "option.selectable === true" in source
+    assert "isCurrent && isStreaming" in source
+    assert "source-available" in source
+    assert "source-waiting" in source
+    assert "source-disabled" in source
+    assert "source-live" in source

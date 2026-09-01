@@ -71,7 +71,8 @@ The panel discovers Juke entities from their integration attributes and shows:
 
 - every physical zone with its selected source, power control, and all
   Juke-routed source candidates;
-- a pulse on a candidate only when Juke reports it as `streaming`;
+- a live indicator only on the currently selected candidate when Juke reports it
+  as `streaming`; other streaming candidates remain available without animation;
 - a selectable candidate only when it is enabled and Juke reports it as
   streaming; and
 - general-input enable, type, and per-zone route controls separately from

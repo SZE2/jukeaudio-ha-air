@@ -216,6 +216,7 @@ def test_zone_exposes_its_immutable_id_for_dashboard_route_controls():
     )
 
     assert zone.extra_state_attributes["juke_zone_id"] == ZONE_ID
+    assert zone.extra_state_attributes["juke_zone_name"] == "Living Room"
 
 
 @pytest.mark.asyncio

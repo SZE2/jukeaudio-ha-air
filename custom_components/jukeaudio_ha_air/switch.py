@@ -111,6 +111,7 @@ class InputEnabledSwitch(CoordinatorEntity, SwitchEntity):
         return {
             "juke_entity_role": "input_enabled",
             "juke_input_id": self._input_id,
+            "juke_input_name": self._current_input_info().get("name", self._input_id),
         }
 
     async def async_turn_on(self) -> None:
@@ -180,7 +181,9 @@ class InputZoneSwitch(CoordinatorEntity, SwitchEntity):
         return {
             "juke_entity_role": "input_route",
             "juke_input_id": self._input_id,
+            "juke_input_name": self._current_input_info().get("name", self._input_id),
             "juke_zone_id": self._zone_id,
+            "juke_zone_name": self._juke.zones[self._zone_id].get("name", self._zone_id),
         }
 
     async def async_turn_on(self) -> None:

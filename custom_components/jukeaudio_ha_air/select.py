@@ -95,6 +95,7 @@ class InputTypeSelect(CoordinatorEntity, SelectEntity):
         return {
             "juke_entity_role": "input_type",
             "juke_input_id": self._input_id,
+            "juke_input_name": self._current_input_info().get("name", self._input_id),
         }
 
     @property

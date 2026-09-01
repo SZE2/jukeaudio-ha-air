@@ -91,6 +91,7 @@ def test_type_select_exposes_stable_dashboard_control_metadata():
     assert selector.extra_state_attributes == {
         "juke_entity_role": "input_type",
         "juke_input_id": "input-0",
+        "juke_input_name": "Juke Bluetooth",
     }
 
 

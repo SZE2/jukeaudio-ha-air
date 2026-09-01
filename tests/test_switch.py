@@ -119,11 +119,14 @@ async def test_switches_expose_stable_dashboard_control_metadata():
     assert enabled.extra_state_attributes == {
         "juke_entity_role": "input_enabled",
         "juke_input_id": "input-0",
+        "juke_input_name": "Input 0",
     }
     assert route.extra_state_attributes == {
         "juke_entity_role": "input_route",
         "juke_input_id": "input-0",
+        "juke_input_name": "Input 0",
         "juke_zone_id": "zone-0",
+        "juke_zone_name": "Zone 0",
     }
 
 

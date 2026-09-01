@@ -94,6 +94,7 @@ class Zone(JukeAudioMediaPlayerBase):
             attributes["warning_count"] = len(zone_data["warnings"])
 
         attributes["juke_zone_id"] = self._zone_id
+        attributes["juke_zone_name"] = zone_data.get("name", self._zone_id)
         attributes["juke_input_options"] = self._zone_input_options()
 
         return attributes
