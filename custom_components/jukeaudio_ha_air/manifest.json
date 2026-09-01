@@ -5,7 +5,7 @@
     "@SZE2"
   ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["http"],
   "documentation": "https://github.com/SZE2/jukeaudio-ha-air/blob/main/README.md",
   "homekit": {},
   "integration_type": "hub",
@@ -14,6 +14,6 @@
   "loggers": ["jukeaudio"],
   "requirements": ["jukeaudio==0.0.11", "pyatv==0.18.0"],
   "ssdp": [],
-  "version": "0.1.14",
+  "version": "0.1.15",
   "zeroconf": []
 }

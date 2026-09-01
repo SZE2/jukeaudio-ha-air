@@ -55,6 +55,23 @@ def test_manifest_declares_pure_python_raop_runtime_dependency() -> None:
     assert "pyatv==0.18.0" in manifest["requirements"]
 
 
+def test_manifest_declares_http_dependency_for_bundled_frontend() -> None:
+    """The bundled frontend static route requires Home Assistant's HTTP component."""
+    manifest = json.loads(
+        (REPOSITORY_ROOT / "custom_components/jukeaudio_ha_air/manifest.json").read_text()
+    )
+
+    assert "http" in manifest["dependencies"]
+
+
+def test_integration_ships_a_hacs_brand_icon() -> None:
+    """HACS requires an integration-local PNG brand icon when none is upstream."""
+    icon = REPOSITORY_ROOT / "custom_components/jukeaudio_ha_air/brand/icon.png"
+
+    assert icon.is_file()
+    assert icon.read_bytes()[:8] == bytes([137, 80, 78, 71, 13, 10, 26, 10])
+
+
 def test_fork_has_an_isolated_hacs_component_domain() -> None:
     """The fork must never share the upstream component install path."""
     component_root = REPOSITORY_ROOT / "custom_components/jukeaudio_ha_air"
