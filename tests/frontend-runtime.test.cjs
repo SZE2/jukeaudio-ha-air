@@ -134,7 +134,7 @@ test("zone source states use backend selectability and animate only current stre
   const { registry } = loadFrontend();
   const card = new (registry.get("juke-zone-card"))();
   const calls = [];
-  card.setConfig({ entity: "media_player.greatroom" });
+  card.setConfig({ entity: "media_player.greatroom", name: "Long generated zone label" });
   card.hass = {
     states: {
       "media_player.greatroom": {

@@ -204,7 +204,7 @@ class JukeZoneCard extends HTMLElement {
       state?.state === "off" ? "zone-off" : state?.state === "unavailable" ? "zone-unavailable" : "",
     );
     const header = create("div", "card-head");
-    const zoneName = readableLabel(this.config.name || zoneDisplayName(state, this.config.entity), "Unknown zone");
+    const zoneName = zoneDisplayName(state, this.config.entity);
     const heading = create("div");
     heading.append(
       create("div", "zone-name", zoneName),
