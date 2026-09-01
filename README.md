@@ -69,14 +69,22 @@ repository or Lovelace resource registration is required.
 
 The panel discovers Juke entities from their integration attributes and shows:
 
-- every physical zone with its selected source, power control, and all
-  Juke-routed source candidates;
+- every physical zone with its power control, volume slider, and Juke-routed
+  source tiles;
+- source-tile status directly on each tile: selected sources use green selection
+  treatment, streaming-but-not-selected sources use a restrained green outline,
+  waiting sources use a dark tile with a yellow dot, and disabled sources are
+  subdued grey;
+- no separate selected-source panel, so a source reported for another context
+  can never make an unrelated tile appear selected;
 - a live indicator only on the currently selected candidate when Juke reports it
   as `streaming`; other streaming candidates remain available without animation;
 - a selectable candidate only when it is enabled and Juke reports it as
   streaming; and
 - general-input enable, type, and per-zone route controls separately from
-  audio playback.
+  audio playback. Every long-running control shows inline `Updating…` state,
+  then releases when authoritative Home Assistant state arrives or a bounded
+  timeout expires.
 
 Selecting a source always calls Juke's active-input operation only. Route
 changes remain explicit input-to-zone controls, so an automation must follow
@@ -88,6 +96,22 @@ The bundled `custom:juke-zone-card` is also registered automatically for an
 owner-created Lovelace dashboard. The card uses the same Juke-reported
 availability rules as the panel; it never makes a non-streaming or disabled
 source clickable.
+
+For an existing Lovelace view such as `/juke-audio/juke-control`, add one
+manual card with no entity rows:
+
+```yaml
+type: custom:juke-audio-card
+```
+
+That unified card renders **Zones** first and **Inputs & routing** below it,
+using two columns on desktop and one column on narrow or touch/mobile clients.
+It reads the explicit `juke_zone_name`, `juke_input_name`, and route
+`juke_zone_name` metadata supplied by the integration, so generated Home
+Assistant entity labels do not appear in the controls. Each zone also exposes its
+current volume as a slider wired to Home Assistant's `media_player.volume_set`
+service. Input enablement is a plain right-aligned switch; the card does not add
+an icon, duplicate status badge, or redundant availability text.
 
 > [!CAUTION]
 > Juke remains the source of truth for zone selection and playback state. Some
