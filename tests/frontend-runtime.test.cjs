@@ -857,6 +857,71 @@ test("the unified Lovelace card renders the same zones-first friendly-label layo
   assert.equal(root.children[3], inputSection);
 });
 
+test("unified input headings prefer matching Juke source options over generic metadata", () => {
+  const { registry } = loadFrontend();
+  const card = new (registry.get("juke-audio-card"))();
+  card.setConfig({ type: "custom:juke-audio-card" });
+  card.hass = {
+    states: {
+      "media_player.primary": {
+        state: "on",
+        attributes: {
+          juke_input_options: [
+            { input_id: "BE954A-055-I0", source: "Juke Bluetooth" },
+            { input_id: "BE954A-055-I1", source: "Juke Spotify Kitchen" },
+            { input_id: "BE954A-055-I2", source: "Juke-Primary" },
+            { input_id: "BE954A-055-I3", source: "Juke-DLNA2" },
+          ],
+        },
+      },
+      "switch.input_bluetooth": {
+        state: "on",
+        attributes: {
+          juke_entity_role: "input_enabled",
+          juke_input_id: "BE954A-055-I0",
+          juke_input_name: "Input1",
+        },
+      },
+      "switch.input_spotify": {
+        state: "on",
+        attributes: {
+          juke_entity_role: "input_enabled",
+          juke_input_id: "BE954A-055-I1",
+          juke_input_name: "Input2 LivingSpace",
+        },
+      },
+      "switch.input_primary": {
+        state: "on",
+        attributes: {
+          juke_entity_role: "input_enabled",
+          juke_input_id: "BE954A-055-I2",
+          juke_input_name: "3-PrimarySuite",
+        },
+      },
+      "switch.input_dlna": {
+        state: "on",
+        attributes: {
+          juke_entity_role: "input_enabled",
+          juke_input_id: "BE954A-055-I3",
+          juke_input_name: "Configured DLNA",
+        },
+      },
+      "switch.input_fallback": {
+        state: "on",
+        attributes: {
+          juke_entity_role: "input_enabled",
+          juke_input_id: "unmatched-input",
+          juke_input_name: "Input1",
+        },
+      },
+    },
+    callService: () => {},
+  };
+
+  const headings = byClass(card, "input-name").map((heading) => heading.textContent);
+  assert.deepEqual(headings, ["Bluetooth", "DLNA 2", "Input1", "Primary", "Spotify Kitchen"]);
+});
+
 test("missing Juke metadata never leaks generated Home Assistant entity labels", () => {
   const { registry } = loadFrontend();
   const card = new (registry.get("juke-audio-card"))();

@@ -42,7 +42,13 @@ const formatSourceLabel = (value, fallback = "Unknown source") => {
 const zoneDisplayName = (state) =>
   readableLabel(state?.attributes?.juke_zone_name || state?.attributes?.juke_zone_id, "Unknown zone");
 
-const inputDisplayName = (records) => {
+const inputDisplayName = (records, sourceLabels = new Map()) => {
+  const inputRecord = records.find(
+    ([, state]) => typeof state.attributes?.juke_input_id === "string",
+  );
+  const inputId = inputRecord?.[1].attributes.juke_input_id;
+  if (sourceLabels.has(inputId)) return formatSourceLabel(sourceLabels.get(inputId));
+
   const namedRecord = records.find(
     ([, state]) => typeof state.attributes?.juke_input_name === "string",
   );
@@ -504,6 +510,18 @@ class JukeDashboardElement extends HTMLElement {
       .sort(([, left], [, right]) =>
         zoneDisplayName(left).localeCompare(zoneDisplayName(right)),
       );
+    const sourceLabels = new Map();
+    for (const [, state] of zoneStates) {
+      for (const option of zoneOptions(state)) {
+        if (
+          typeof option?.input_id === "string"
+          && typeof option?.source === "string"
+          && !sourceLabels.has(option.input_id)
+        ) {
+          sourceLabels.set(option.input_id, option.source);
+        }
+      }
+    }
 
     const root = create("main", "panel-shell");
     const hero = create("header", "hero");
@@ -561,7 +579,7 @@ class JukeDashboardElement extends HTMLElement {
     const sortedInputIds = [...inputIds].sort((leftId, rightId) => {
       const leftRecords = entities.filter(([, state]) => state.attributes?.juke_input_id === leftId);
       const rightRecords = entities.filter(([, state]) => state.attributes?.juke_input_id === rightId);
-      return inputDisplayName(leftRecords).localeCompare(inputDisplayName(rightRecords));
+      return inputDisplayName(leftRecords, sourceLabels).localeCompare(inputDisplayName(rightRecords, sourceLabels));
     });
 
     for (const inputId of sortedInputIds) {
@@ -573,7 +591,7 @@ class JukeDashboardElement extends HTMLElement {
         .sort(([, left], [, right]) => routeDisplayName(left).localeCompare(routeDisplayName(right)));
       const card = create("ha-card", "input-card");
       const inputTop = create("div", "input-top");
-      const inputName = inputDisplayName(records);
+      const inputName = inputDisplayName(records, sourceLabels);
       inputTop.append(create("div", "input-name", inputName));
       if (enabled) {
         const enabledState = enabled[1].state === "on";
