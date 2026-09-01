@@ -151,14 +151,14 @@ async def test_group_only_general_input_gets_an_enable_switch_without_a_zone_own
 
 @pytest.mark.asyncio
 async def test_switch_identity_and_name_are_pair_based_and_reordering_stable():
-    """Input/zone ordering does not affect pair identity or display names."""
+    """Input/zone ordering does not affect identity or concise zone labels."""
     hub = _FakeHub()
     entry = SimpleNamespace(entry_id="entry-1")
     first = []
     await async_setup_entry(_make_hass(hub), entry, first.extend)
 
     first_by_id = {entity.unique_id: entity.name for entity in first}
-    assert first_by_id["route_input-2_zone-4"] == "Input 2 to Zone 4"
+    assert first_by_id["route_input-2_zone-4"] == "Zone 4"
 
     hub.group_inputs = dict(reversed(list(hub.group_inputs.items())))
     juke = hub.jukes["amp-1"]

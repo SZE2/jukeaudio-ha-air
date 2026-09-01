@@ -159,10 +159,9 @@ class InputZoneSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def name(self) -> str:
-        """Return the input-to-zone display name."""
-        input_info = self._current_input_info()
+        """Return the concise Juke target-zone display name."""
         zone_info = self._juke.zones[self._zone_id]
-        return f"{input_info.get('name', self._input_id)} to {zone_info.get('name', self._zone_id)}"
+        return zone_info.get("name", self._zone_id)
 
     @property
     def device_info(self) -> DeviceInfo:

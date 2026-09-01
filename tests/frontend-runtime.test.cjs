@@ -83,8 +83,9 @@ class FakeElement extends FakeNode {
   }
 }
 
-function loadFrontend() {
+function loadFrontend({ homeAssistantReady = true } = {}) {
   const registry = new Map();
+  const pendingTimers = [];
   const document = {
     head: new FakeElement("head"),
     createElement(tagName) {
@@ -95,6 +96,7 @@ function loadFrontend() {
       return new FakeNode(String(text));
     },
   };
+  if (homeAssistantReady) registry.set("home-assistant", FakeElement);
   const context = {
     document,
     customElements: {
@@ -102,14 +104,27 @@ function loadFrontend() {
       define: (name, Constructor) => registry.set(name, Constructor),
     },
     HTMLElement: FakeElement,
-    window: { customCards: [] },
+    window: {
+      customCards: [],
+      setTimeout(callback) {
+        pendingTimers.push(callback);
+        return pendingTimers.length;
+      },
+    },
   };
   const source = fs.readFileSync(
     path.join(__dirname, "..", "custom_components", "jukeaudio_ha_air", "frontend", "juke-audio.js"),
     "utf8",
   );
   vm.runInNewContext(source, context, { filename: "juke-audio.js" });
-  return { context, registry };
+  return {
+    context,
+    registry,
+    makeHomeAssistantReady() {
+      registry.set("home-assistant", FakeElement);
+      while (pendingTimers.length) pendingTimers.shift()();
+    },
+  };
 }
 
 function descendants(root) {
@@ -129,6 +144,23 @@ function descendants(root) {
 function byClass(root, className) {
   return descendants(root).filter((node) => node.classList?.contains(className));
 }
+
+test("custom elements register after Home Assistant creates its scoped registry", () => {
+  const { context, registry, makeHomeAssistantReady } = loadFrontend({ homeAssistantReady: false });
+
+  assert.equal(registry.get("juke-zone-card"), undefined);
+  assert.deepEqual(context.window.customCards, []);
+
+  makeHomeAssistantReady();
+
+  assert.equal(typeof registry.get("juke-zone-card"), "function");
+  assert.equal(typeof registry.get("ha-panel-juke-audio-panel"), "function");
+  assert.deepEqual(JSON.parse(JSON.stringify(context.window.customCards)), [{
+    type: "juke-zone-card",
+    name: "Juke Zone Card",
+    description: "Juke-aware zone input control",
+  }]);
+});
 
 test("zone source states use backend selectability and animate only current streaming source", () => {
   const { registry } = loadFrontend();

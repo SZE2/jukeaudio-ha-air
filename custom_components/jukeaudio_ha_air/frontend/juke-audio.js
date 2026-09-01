@@ -514,9 +514,22 @@ class JukeAudioPanel extends HTMLElement {
   }
 }
 
-if (!customElements.get(JUKE_ZONE_CARD)) customElements.define(JUKE_ZONE_CARD, JukeZoneCard);
-if (!customElements.get(HA_PANEL)) customElements.define(HA_PANEL, JukeAudioPanel);
-window.customCards = window.customCards || [];
-if (!window.customCards.some((card) => card.type === JUKE_ZONE_CARD)) {
-  window.customCards.push({ type: JUKE_ZONE_CARD, name: "Juke Zone Card", description: "Juke-aware zone input control" });
-}
+const registerJukeElements = () => {
+  if (!customElements.get(JUKE_ZONE_CARD)) customElements.define(JUKE_ZONE_CARD, JukeZoneCard);
+  if (!customElements.get(HA_PANEL)) customElements.define(HA_PANEL, JukeAudioPanel);
+  window.customCards = window.customCards || [];
+  if (!window.customCards.some((card) => card.type === JUKE_ZONE_CARD)) {
+    window.customCards.push({ type: JUKE_ZONE_CARD, name: "Juke Zone Card", description: "Juke-aware zone input control" });
+  }
+};
+
+const registerJukeElementsWhenReady = () => {
+  // HA's scoped custom-element registry must own the definitions first.
+  if (customElements.get("home-assistant")) {
+    registerJukeElements();
+    return;
+  }
+  window.setTimeout(registerJukeElementsWhenReady, 0);
+};
+
+registerJukeElementsWhenReady();
