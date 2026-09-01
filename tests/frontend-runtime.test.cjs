@@ -207,6 +207,14 @@ test("zone source states use backend selectability and animate only current stre
   assert.equal(waiting.disabled, true);
 });
 
+test("input routing cards stack into one column on touch/mobile screens", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "custom_components", "jukeaudio_ha_air", "frontend", "juke-audio.js"),
+    "utf8",
+  );
+  assert.match(source, /@media \(pointer: coarse\)\s*\{\s*\.input-grid\s*\{\s*grid-template-columns:\s*1fr;/);
+});
+
 test("panel labels use explicit Juke metadata without a generated friendly name", () => {
   const { registry } = loadFrontend();
   const panel = new (registry.get("ha-panel-juke-audio-panel"))();

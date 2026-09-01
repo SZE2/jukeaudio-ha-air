@@ -354,6 +354,10 @@ const panelStyle = `
     .zone-grid, .input-grid { grid-template-columns: 1fr; }
     .panel-shell { padding-top: 20px; }
   }
+  /* Mobile browsers can report a wide CSS viewport; use touch capability too. */
+  @media (pointer: coarse) {
+    .input-grid { grid-template-columns: 1fr; }
+  }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
 `;
 
